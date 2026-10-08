@@ -184,6 +184,7 @@ class ReplyOut(ORM):
     requires_human_attention: bool
     opt_out_detected: bool
     analyzed_at: datetime | None
+    agent_run_id: uuid.UUID | None = None  # set when the Reply Analysis Agent (not only rules) classified it
 
 
 class ReplyWithContext(ReplyOut):

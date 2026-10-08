@@ -1,62 +1,123 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
+import { AgentActivity } from "../components/AgentActivity";
+import { fmtUnknown, leadStages } from "../components/agents";
+import { SafetyPanel } from "../components/SafetyPanel";
+import { Timeline } from "../components/Timeline";
 import { Badge, Card, Empty, ErrorBanner, Notice, when } from "../components/ui";
-import { useAction, useAsync } from "../components/useAsync";
-import type { Contact, Job, LeadDetail as Lead } from "../types";
+import { useAction } from "../components/useAsync";
+import { WorkflowPipeline } from "../components/WorkflowPipeline";
+import { describeError } from "../api";
+import type { AgentRun, Contact, EmailReview, Job, LeadDetail as Lead, ResearchData } from "../types";
 
 type Criterion = { rating: string; weight: number; points: number; evidence: string };
 const CRITERIA: [string, string][] = [
   ["industry_fit", "Industry fit"],
-  ["company_size_fit", "Company size fit"],
+  ["company_size_fit", "Company size"],
   ["pain_point_fit", "Pain point fit"],
-  ["signal_strength", "Buying signals"],
+  ["signal_strength", "Signal strength"],
 ];
+
+interface State {
+  lead: Lead;
+  runs: AgentRun[];
+  orgRuns: AgentRun[];
+  review: EmailReview | null;
+}
 
 export default function LeadDetail() {
   const { id } = useParams();
-  const lead = useAsync(() => api.get<Lead>(`/leads/${id}`), [id]);
+  const [state, setState] = useState<State | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
   const action = useAction();
-  const l = lead.data;
+  const alive = useRef(true);
+
+  const load = useCallback(async () => {
+    try {
+      const [lead, runs, orgRuns] = await Promise.all([
+        api.get<Lead>(`/leads/${id}`),
+        api.get<AgentRun[]>(`/agent-runs?lead_id=${id}&limit=100`),
+        api.get<AgentRun[]>(`/agent-runs?agent_name=analytics&limit=1`),
+      ]);
+      const initial = lead.emails.find((e) => e.sequence_number === 0);
+      const review = initial ? await api.get<EmailReview>(`/emails/${initial.id}`) : null;
+      if (alive.current) {
+        setState({ lead, runs, orgRuns, review });
+        setLoadError(null);
+      }
+    } catch (err) {
+      if (alive.current) setLoadError(describeError(err));
+    }
+  }, [id]);
+
+  useEffect(() => {
+    alive.current = true;
+    void load();
+    return () => {
+      alive.current = false;
+    };
+  }, [load]);
 
   async function step(label: string, path: string, success: string) {
     await action.run(label, () => api.post(path), success);
-    await lead.reload();
+    await load();
   }
 
-  async function processInBackground() {
+  /** Queue the orchestrator job and watch real agent_runs/lead state update while the worker runs it. */
+  async function runPipeline() {
     const job = await action.run("process", () => api.post<Job>(`/leads/${id}/process`));
     if (!job) return;
-    action.setNotice("Pipeline queued. The worker runs Research → Qualify → Draft…");
-    for (let i = 0; i < 60; i++) {
-      await new Promise((r) => setTimeout(r, 2000));
-      const current = await api.get<Job>(`/jobs/${job.id}`);
-      if (current.status === "SUCCEEDED" || current.status === "FAILED") {
-        action.setNotice(current.status === "SUCCEEDED" ? "Pipeline finished." : `Pipeline failed: ${current.last_error}`);
-        break;
+    setLive(true);
+    action.setNotice("Pipeline queued — the worker's orchestrator is running the agents…");
+    try {
+      for (let i = 0; i < 120; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const [current] = await Promise.all([api.get<Job>(`/jobs/${job.id}`), load()]);
+        if (current.status === "SUCCEEDED" || current.status === "FAILED") {
+          const steps = (current.result?.steps as { step: string; status: string; detail: string }[] | undefined) ?? [];
+          const stopped = steps.find((s) => s.status === "stopped" || s.status === "failed");
+          action.setNotice(
+            current.status === "FAILED"
+              ? `Pipeline failed: ${current.last_error}`
+              : stopped
+                ? `Pipeline stopped at ${stopped.step}: ${stopped.detail}`
+                : "Pipeline finished — draft is waiting for your review.",
+          );
+          break;
+        }
+        if (i === 10 && current.status === "QUEUED") {
+          action.setNotice("Still queued… is the worker running? (python -m app.worker)");
+        }
       }
+    } finally {
+      setLive(false);
+      await load();
     }
-    await lead.reload();
   }
 
-  if (lead.error) return <ErrorBanner error={lead.error} />;
-  if (!l) return <p className="muted">Loading…</p>;
+  if (loadError && !state) return <ErrorBanner error={loadError} />;
+  if (!state) return <p className="muted">Loading…</p>;
+  const { lead: l, runs, review } = state;
+  const stages = leadStages(l, runs, review, state.orgRuns);
   const contact = l.contacts[0];
   const suppressed = l.status === "SUPPRESSED";
-  const busy = !!action.busy;
+  const busy = !!action.busy || live;
+  const initial = l.emails.find((e) => e.sequence_number === 0);
 
   return (
     <>
       <div className="page-header">
         <div>
-          <h1>{l.company_name} <Badge value={l.status} /></h1>
+          <h1>{l.company_name} <Badge value={l.status} />{l.disabled && <Badge value="BLOCKED" />}</h1>
           <div className="muted">
             Campaign: {l.campaign.name} {l.website && <>· <a href={l.website} target="_blank" rel="noreferrer">{l.website}</a></>}
           </div>
         </div>
         <div className="actions">
-          <button className="primary" disabled={busy || suppressed || l.disabled} onClick={processInBackground}>
-            Run full pipeline
+          <button className="primary" disabled={busy || suppressed || l.disabled} onClick={runPipeline}>
+            {live ? "Running…" : "▶ Run full pipeline"}
           </button>
           {l.disabled ? (
             <button disabled={busy} onClick={() => step("enable", `/leads/${id}/enable`, "Lead enabled.")}>Enable lead</button>
@@ -65,57 +126,48 @@ export default function LeadDetail() {
           )}
         </div>
       </div>
-      <ErrorBanner error={action.error} onClose={() => action.setError(null)} />
+      <ErrorBanner error={action.error ?? loadError} onClose={() => action.setError(null)} />
       <Notice message={action.notice} />
       {action.busy && action.busy !== "process" && <div className="banner info">Working: {action.busy}… agents can take a few seconds.</div>}
 
-      <div className="steps">
-        <button disabled={busy || suppressed} onClick={() => step("research", `/leads/${id}/research`, "Research complete.")}>
-          1 · {l.research ? "Re-run research" : "Research"}
-        </button>
-        <button disabled={busy || suppressed || !l.research} onClick={() => step("qualify", `/leads/${id}/qualify`, "Qualification complete.")}>
-          2 · Qualify
-        </button>
-        <button disabled={busy || suppressed || !l.qualified || l.disabled}
-                onClick={() => step("generate email", `/leads/${id}/generate-email`, "Draft ready for review.")}>
-          3 · {l.emails.some((e) => e.sequence_number === 0) ? "Regenerate email" : "Generate email"}
-        </button>
-        {l.emails[0] && <Link className="button" to={`/emails/${l.emails[0].id}`}>4 · Review & send →</Link>}
+      <WorkflowPipeline stages={stages} />
+
+      <div className="grid-main">
+        <div className="stack-lg">
+          <div className="steps">
+            <span className="muted small">Run agents step by step:</span>
+            <button disabled={busy || suppressed} onClick={() => step("research", `/leads/${id}/research`, "Research complete.")}>
+              1 · {l.research ? "Re-run research" : "Research"}
+            </button>
+            <button disabled={busy || suppressed || !l.research} onClick={() => step("qualify", `/leads/${id}/qualify`, "Qualification complete.")}>
+              2 · Qualify
+            </button>
+            <button disabled={busy || suppressed || !l.qualified || l.disabled}
+                    onClick={() => step("generate email", `/leads/${id}/generate-email`, "Draft ready for review.")}>
+              3 · {initial ? "Regenerate email" : "Generate email"}
+            </button>
+            {initial && <Link className="button" to={`/emails/${initial.id}`}>4 · Human review →</Link>}
+          </div>
+          <ResearchCard lead={l} personalizationUsed={review?.personalization_used ?? []} />
+          <QualificationCard lead={l} />
+        </div>
+        <AgentActivity stages={stages.filter((s) => s.key !== "send")} live={live} />
       </div>
 
-      <div className="grid-2">
-        <ResearchCard lead={l} />
-        <Card title="Qualification">
-          {l.qualified === null ? <Empty>Not qualified yet.</Empty> : (
-            <>
-              <div className="score-row">
-                <div className={`score ${l.qualified ? "good" : "bad"}`}>{l.qualification_score}</div>
-                <div>
-                  <b>{l.qualified ? "Qualified" : "Not qualified"}</b>
-                  <p>{l.qualification_reason}</p>
-                  {l.recommended_angle && <p><span className="muted">Recommended angle:</span> {l.recommended_angle}</p>}
-                </div>
-              </div>
-              <table className="compact">
-                <thead><tr><th>Criterion</th><th>Rating</th><th>Points</th><th>Evidence</th></tr></thead>
-                <tbody>
-                  {CRITERIA.map(([key, label]) => {
-                    const c = l.qualification_breakdown?.[key] as Criterion | undefined;
-                    return c ? (
-                      <tr key={key}><td>{label}</td><td>{c.rating}</td><td>{c.points}/{c.weight}</td><td className="small">{c.evidence}</td></tr>
-                    ) : null;
-                  })}
-                </tbody>
-              </table>
-              <p className="muted small">Score is computed by fixed weights from the ratings; threshold {String(l.qualification_breakdown?.threshold ?? "")}.</p>
-            </>
-          )}
+      {initial && review && (
+        <Card title="Human review & safety gate"
+              actions={<Link className="button primary-outline" to={`/emails/${initial.id}`}>Open email review →</Link>}>
+          <p className="small">
+            <Badge value={initial.status} /> <b>{initial.subject}</b>
+            {review.draft_confidence !== null && <span className="muted"> · Outreach Agent confidence {review.draft_confidence.toFixed(2)}</span>}
+          </p>
+          <SafetyPanel check={review.send_check} sent={["SENT", "DELIVERED", "REPLIED", "COMPLETED"].includes(initial.status)} />
         </Card>
-      </div>
+      )}
 
       <div className="grid-2">
-        {contact && <ContactCard contact={contact} onChanged={lead.reload} />}
-        <Card title="Emails">
+        {contact && <ContactCard contact={contact} onChanged={load} />}
+        <Card title="Emails & follow-up schedule">
           {l.emails.length === 0 && <Empty>No emails yet.</Empty>}
           <ul className="list">
             {l.emails.map((e) => (
@@ -127,11 +179,11 @@ export default function LeadDetail() {
           </ul>
           {l.followups.length > 0 && (
             <>
-              <h3>Follow-up schedule</h3>
+              <h3>Follow-up schedule (max {l.campaign.max_followups ?? "default"})</h3>
               <ul className="list">
                 {l.followups.map((f) => (
                   <li key={f.id}>
-                    <span>Step {f.sequence_number} · due {when(f.due_at)}{f.cancel_reason && <span className="muted small"> ({f.cancel_reason})</span>}</span>
+                    <span>Step {f.sequence_number} · due {when(f.due_at)}{f.cancel_reason && <span className="muted small"> ({f.cancel_reason.replace(/[_:]/g, " ")})</span>}</span>
                     <Badge value={f.status} />
                   </li>
                 ))}
@@ -142,47 +194,145 @@ export default function LeadDetail() {
       </div>
 
       <div className="grid-2">
-        <RepliesCard lead={l} onChanged={lead.reload} />
-        <Card title="Timeline">
-          <ul className="timeline">
-            {l.timeline.map((t, i) => (
-              <li key={i}><span className="muted small">{when(t.at)}</span> {t.description}</li>
-            ))}
-          </ul>
+        <RepliesCard lead={l} onChanged={load} />
+        <Card title="Activity timeline">
+          <Timeline events={l.timeline} />
         </Card>
       </div>
     </>
   );
 }
 
-function ResearchCard({ lead }: { lead: Lead }) {
+function Unknown({ value }: { value: string | null | undefined }) {
+  const v = fmtUnknown(value);
+  return <span className={v === "Unknown" ? "unknown" : ""}>{v}</span>;
+}
+
+function sourceFor(r: ResearchData, text: string) {
+  const t = text.toLowerCase();
+  return r.sources.find((s) => s.claim.toLowerCase().includes(t) || t.includes(s.claim.toLowerCase()));
+}
+
+function SourceLink({ url }: { url: string }) {
+  return url.startsWith("http") ? (
+    <a href={url} target="_blank" rel="noreferrer" className="source-link">{url.replace(/^https?:\/\//, "")}</a>
+  ) : (
+    <span className="source-link muted">{url === "user-notes" ? "your lead notes" : url}</span>
+  );
+}
+
+function ResearchCard({ lead, personalizationUsed }: { lead: Lead; personalizationUsed: string[] }) {
   const r = lead.research?.data;
-  if (!r) return <Card title="Research"><Empty>Not researched yet.</Empty></Card>;
-  const list = (title: string, items: string[]) => (
-    <>
+  if (!r) return <Card title="Research intelligence"><Empty>Not researched yet. The Research Agent only uses public evidence and marks anything unverifiable as Unknown.</Empty></Card>;
+  const used = new Set(personalizationUsed.map((p) => p.toLowerCase()));
+  const conf = r.confidence;
+  const list = (title: string, items: string[], opts: { cite?: boolean; highlight?: boolean } = {}) => (
+    <div>
       <h3>{title}</h3>
-      {items.length ? <ul>{items.map((i) => <li key={i}>{i}</li>)}</ul> : <p className="muted small">None found (not guessed).</p>}
-    </>
+      {items.length ? (
+        <ul className="evidence-list">
+          {items.map((i) => {
+            const src = opts.cite ? sourceFor(r, i) : undefined;
+            const isUsed = opts.highlight && used.has(i.toLowerCase());
+            return (
+              <li key={i} className={isUsed ? "used" : ""}>
+                {isUsed && <span className="used-tag">✓ used in email</span>}
+                {i}
+                {src && <> <SourceLink url={src.url} /></>}
+              </li>
+            );
+          })}
+        </ul>
+      ) : <p className="unknown small">Unknown — not found in evidence (not guessed)</p>}
+    </div>
   );
   return (
-    <Card title={`Research · confidence ${r.confidence.toFixed(2)}`}>
+    <Card title="Research intelligence" actions={
+      <span className={`confidence ${conf >= 0.6 ? "high" : conf >= 0.35 ? "mid" : "low"}`}>Confidence {conf.toFixed(2)}</span>
+    }>
       <p>{r.company_summary}</p>
       <dl className="facts">
-        <dt>Industry</dt><dd className={r.industry === "unknown" ? "muted" : ""}>{r.industry}</dd>
-        <dt>Company size</dt><dd className={r.company_size === "unknown" ? "muted" : ""}>{r.company_size}</dd>
+        <dt>Industry</dt><dd><Unknown value={r.industry} /></dd>
+        <dt>Company size</dt><dd><Unknown value={r.company_size} /></dd>
       </dl>
-      {list("Relevant signals", r.relevant_signals)}
+      {personalizationUsed.length > 0 && (
+        <div className="personalization-box">
+          <h3>Personalization used in the email</h3>
+          <ul>
+            {personalizationUsed.map((p) => {
+              const src = sourceFor(r, p);
+              return <li key={p}>✓ {p} {src ? <SourceLink url={src.url} /> : <span className="muted small">(from research summary)</span>}</li>;
+            })}
+          </ul>
+        </div>
+      )}
+      <div className="grid-2 tight">
+        {list("Growth / buying signals", r.relevant_signals, { cite: true, highlight: true })}
+        {list("Personalization points", r.personalization_points, { cite: true, highlight: true })}
+      </div>
       {list("Likely pain points (hypotheses)", r.likely_pain_points)}
-      {list("Personalization points", r.personalization_points)}
-      <h3>Sources</h3>
+      <h3>Sources & evidence</h3>
       {r.sources.length ? (
-        <ul className="small">
-          {r.sources.map((s, i) => (
-            <li key={i}>{s.claim} — {s.url.startsWith("http") ? <a href={s.url} target="_blank" rel="noreferrer">{s.url}</a> : <span className="muted">{s.url}</span>}</li>
-          ))}
-        </ul>
-      ) : <p className="muted small">No sources.</p>}
+        <ol className="sources">
+          {r.sources.map((s, i) => <li key={i}><span>“{s.claim}”</span> <SourceLink url={s.url} /></li>)}
+        </ol>
+      ) : <p className="unknown small">No sources — no claims were made.</p>}
+      {!!r.evidence_urls?.length && <p className="muted small">Evidence fetched: {r.evidence_urls.join(", ")}</p>}
       {!!r.evidence_errors?.length && <p className="muted small">Research tool issues: {r.evidence_errors.join("; ")}</p>}
+    </Card>
+  );
+}
+
+function QualificationCard({ lead: l }: { lead: Lead }) {
+  if (l.qualified === null) return <Card title="Qualification"><Empty>Not qualified yet.</Empty></Card>;
+  const b = l.qualification_breakdown ?? {};
+  const rows = CRITERIA.map(([key, label]) => [key, label, b[key] as Criterion | undefined] as const).filter(([, , c]) => c);
+  const total = rows.reduce((sum, [, , c]) => sum + (c?.points ?? 0), 0);
+  const max = rows.reduce((sum, [, , c]) => sum + (c?.weight ?? 0), 0);
+  const unknown = rows.filter(([, , c]) => c?.rating === "unknown").map(([, label]) => label);
+  const disqualifiers = (b.disqualifiers as string[] | undefined) ?? [];
+  const threshold = b.threshold as number | undefined;
+  return (
+    <Card title="Explainable qualification" actions={<Badge value={l.qualified ? "QUALIFIED" : "DISQUALIFIED"} />}>
+      <div className="score-row">
+        <div className={`score ${l.qualified ? "good" : "bad"}`}>{l.qualification_score}<span>/100</span></div>
+        <div>
+          <b>{l.qualified ? "Why this lead qualified" : "Why this lead was not contacted"}</b>
+          <p>{l.qualification_reason}</p>
+          {l.recommended_angle && <p><span className="muted">Recommended angle:</span> {l.recommended_angle}</p>}
+        </div>
+      </div>
+      {rows.length > 0 && (
+        <table className="score-table">
+          <tbody>
+            {rows.map(([key, label, c]) => (
+              <tr key={key}>
+                <td>{label}</td>
+                <td className="bar-cell">
+                  <div className="bar-track" title={`${c!.points} of ${c!.weight}`}>
+                    <div className={`bar-fill r-${c!.rating}`} style={{ width: `${(c!.points / c!.weight) * 100}%` }} />
+                  </div>
+                </td>
+                <td className="num">{c!.points}/{c!.weight}</td>
+                <td><span className={`rating r-${c!.rating}`}>{c!.rating}</span></td>
+                <td className="small">{c!.evidence}</td>
+              </tr>
+            ))}
+            <tr className="total-row">
+              <td>Total</td><td /><td className="num">{Math.round(total)}/{max}</td>
+              <td colSpan={2} className="small muted">{threshold !== undefined && <>Threshold {threshold} → {l.qualified ? "qualified" : "not qualified"}</>}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+      {disqualifiers.length > 0 && (
+        <div className="banner error"><span><b>Disqualifier:</b> {disqualifiers.join("; ")} — overrides the score.</span></div>
+      )}
+      {unknown.length > 0 && <p className="small"><span className="unknown">Unknown fields:</span> {unknown.join(", ")} — scored low rather than guessed.</p>}
+      <p className="rule-note">
+        § The Qualification Agent only rates each criterion (strong / partial / none / unknown) with evidence.
+        The score is computed by fixed backend weights (strong 100%, partial 50%, unknown 20%, none 0%) — the LLM never picks the number.
+      </p>
     </Card>
   );
 }
@@ -214,7 +364,7 @@ function ContactCard({ contact, onChanged }: { contact: Contact; onChanged: () =
           <dt>Email</dt><dd>{contact.email}</dd>
         </dl>
       )}
-      {contact.suppressed && <p><Badge value="SUPPRESSED" /> <span className="small">{contact.suppression_reason?.replace(/_/g, " ")}</span></p>}
+      {contact.suppressed && <p><Badge value="SUPPRESSED" /> <span className="small">{contact.suppression_reason?.replace(/_/g, " ")} — all outreach blocked by backend rules</span></p>}
       {!contact.forgotten_at && (
         <div className="actions">
           {!contact.suppressed && <button disabled={!!action.busy} onClick={unsubscribe}>Unsubscribe</button>}
@@ -240,7 +390,7 @@ function RepliesCard({ lead, onChanged }: { lead: Lead; onChanged: () => void })
   }
 
   return (
-    <Card title="Replies">
+    <Card title="Replies" actions={<Link to="/replies">All replies →</Link>}>
       <ErrorBanner error={action.error} />
       <Notice message={action.notice} />
       {lead.replies.length === 0 && <Empty>No replies.</Empty>}
@@ -248,12 +398,13 @@ function RepliesCard({ lead, onChanged }: { lead: Lead; onChanged: () => void })
         <div key={r.id} className="reply">
           <div className="reply-head">
             <Badge value={r.classification ?? "PENDING"} />
-            {r.requires_human_attention && <span className="badge warn">needs attention</span>}
+            {r.opt_out_detected && <span className="badge bad">opt-out rule triggered</span>}
+            {r.requires_human_attention && <span className="badge warn">needs human</span>}
             <span className="muted small">{when(r.received_at)}</span>
           </div>
           <blockquote>{r.body}</blockquote>
           {r.summary && <p className="small">{r.summary}</p>}
-          {r.recommended_action && <p className="small"><b>Next:</b> {r.recommended_action}</p>}
+          {r.recommended_action && <p className="small"><b>→</b> {r.recommended_action}</p>}
         </div>
       ))}
       {sentEmails.length > 0 && !lead.contacts[0]?.forgotten_at && (

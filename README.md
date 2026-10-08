@@ -81,6 +81,36 @@ npm run dev                              # http://localhost:5173 (proxies /api �
 7. Try **Forget Me**: outreach stops, personal data is erased, and the address can never be
    re-imported.
 
+## Hackathon demo script
+
+The UI is built to make the multi-agent system visible. *Agents reason and recommend;
+deterministic backend rules and human approval control what the system may do.*
+
+**Demo 1: a good lead.** Keep the worker running.
+
+1. Add a lead with a website or notes, e.g. *"Acme Logistics is a logistics software company with
+   120 employees. They are hiring 5 account executives."*
+2. Click **▶ Run full pipeline**. The **Orchestration workflow** and **Agent activity** panels
+   update live from the real `agent_runs` rows: status, result, duration and time for each step.
+3. **Research intelligence** shows the evidence, sources, and every unverifiable field as
+   *Unknown*. Facts used in the email are marked **✓ used in email**.
+4. **Explainable qualification** shows the per-criterion points (e.g. 30/30, 20/20, 0/30, 20/20)
+   and the total versus the threshold. The score comes from fixed backend weights, not from the LLM.
+5. **Email Review** shows the flow *AI drafted → Human review → Safety gate → Send*, the AI
+   confidence, the evidence used, and the live `can_send()` checklist. The actions are
+   **Edit draft**, **Approve & Send** and **Reject**.
+6. Log a reply such as *"Sounds interesting — could we do a call Thursday?"*:
+   - The Reply Analysis Agent classifies it as **INTERESTED**.
+   - The follow-up is stopped by rule.
+   - The Replies page explains what was detected, what is recommended, and what the backend did.
+7. **Analytics** updates the funnel, the reply mix and the campaign comparison. *Generate
+   insights* runs the Analytics Agent on those numbers only.
+
+**Demo 2: GrowthOS knows when not to act.** Add a lead with no website and no notes. Research
+returns *Unknown* everywhere, the score is low (20/100), Outreach shows **Blocked**, and no email
+is written. Pause the campaign on a lead with a draft to see **SEND BLOCKED** with the exact
+reason.
+
 ## Using real providers
 
 | Purpose | Settings |
@@ -170,7 +200,7 @@ GET|PUT /business-profile                 PATCH /organization/settings
 GET|POST /campaigns    GET|PUT /campaigns/{id}   POST /campaigns/{id}/pause|resume|complete
 GET|POST /leads        GET /leads/{id}
 POST /leads/{id}/research | qualify | generate-email | process (queued) | disable | enable
-GET /emails            GET|PUT /emails/{id}      POST /emails/{id}/approve | send
+GET /emails            GET|PUT /emails/{id}      POST /emails/{id}/approve | send | reject
 GET|POST /replies      POST /replies/{id}/analyze
 POST /contacts/{id}/forget | unsubscribe
 GET /analytics         POST /analytics/insights

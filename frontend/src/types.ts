@@ -88,7 +88,45 @@ export interface EmailReview extends Email {
   personalization_used: string[];
   draft_confidence: number | null;
   research: ResearchData | null;
-  send_check: { allowed: boolean; reasons: string[] };
+  send_check: SendCheck;
+}
+
+export interface SafetyCheck {
+  key: string;
+  label: string;
+  passed: boolean;
+  reasons: string[];
+}
+
+export interface SendCheck {
+  allowed: boolean;
+  reasons: string[];
+  checks: SafetyCheck[];
+}
+
+export interface AgentRun {
+  id: string;
+  agent_name: string;
+  lead_id: string | null;
+  campaign_id: string | null;
+  provider: string;
+  model: string;
+  prompt_version: string;
+  status: "RUNNING" | "SUCCEEDED" | "FAILED";
+  attempts: number;
+  error: string | null;
+  started_at: string;
+  completed_at: string | null;
+  latency_ms: number | null;
+  output: Record<string, unknown> | null;
+}
+
+export interface ReplyWithContext extends Reply {
+  company_name: string;
+  followups_cancelled: number;
+  followups_pending: number;
+  contact_suppressed: boolean;
+  contact_forgotten: boolean;
 }
 
 export interface Reply {
@@ -106,6 +144,7 @@ export interface Reply {
   requires_human_attention: boolean;
   opt_out_detected: boolean;
   analyzed_at: string | null;
+  agent_run_id: string | null;
 }
 
 export interface Followup {
@@ -137,7 +176,7 @@ export interface LeadDetail {
   emails: Email[];
   replies: Reply[];
   followups: Followup[];
-  timeline: { at: string; type: string; description: string }[];
+  timeline: TimelineEvent[];
 }
 
 export interface Metrics {
@@ -179,4 +218,11 @@ export interface Job {
   attempts: number;
   last_error: string | null;
   result: Record<string, unknown> | null;
+}
+
+export interface TimelineEvent {
+  at: string;
+  type: string;
+  description: string;
+  actor: "agent" | "human" | "system" | "contact";
 }

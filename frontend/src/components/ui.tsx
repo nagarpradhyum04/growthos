@@ -6,13 +6,23 @@ const TONES: Record<string, string> = {
   DRAFT: "warn", APPROVED: "info", SCHEDULED: "info", SENT: "info", DELIVERED: "info", FAILED: "bad",
   ACTIVE: "good", PAUSED: "warn",
   PENDING: "warn", GENERATED: "info", CANCELLED: "muted", LIMIT_REACHED: "muted",
-  INTERESTED: "good", NOT_INTERESTED: "muted", ASKED_QUESTION: "info", REQUESTED_LATER: "warn",
+  BLOCKED: "bad", INTERESTED: "good", NOT_INTERESTED: "muted", ASKED_QUESTION: "info", REQUESTED_LATER: "warn",
   UNSUBSCRIBE: "bad", OUT_OF_OFFICE: "muted", UNKNOWN: "neutral",
+};
+
+// Display names for statuses whose raw value is unclear to a reader.
+const LABELS: Record<string, string> = {
+  DRAFT: "Waiting for review",
+  DRAFTED: "Waiting for review",
+  UNSUBSCRIBE: "Opt out",
+  ASKED_QUESTION: "Question",
+  LIMIT_REACHED: "Sequence complete",
+  CANCELLED: "Stopped",
 };
 
 export function Badge({ value }: { value: string | null | undefined }) {
   if (!value) return <span className="badge muted">—</span>;
-  return <span className={`badge ${TONES[value] ?? "neutral"}`}>{value.replace(/_/g, " ")}</span>;
+  return <span className={`badge ${TONES[value] ?? "neutral"}`}>{LABELS[value] ?? value.replace(/_/g, " ")}</span>;
 }
 
 export function Card({ title, actions, children }: { title?: string; actions?: ReactNode; children: ReactNode }) {

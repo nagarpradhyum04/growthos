@@ -3,13 +3,26 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Badge, Card, Empty, ErrorBanner, when } from "../components/ui";
 import { useAction, useAsync } from "../components/useAsync";
-import type { Reply } from "../types";
+import type { ReplyWithContext } from "../types";
 
 const CLASSES = ["INTERESTED", "ASKED_QUESTION", "REQUESTED_LATER", "NOT_INTERESTED", "UNSUBSCRIBE", "OUT_OF_OFFICE", "UNKNOWN"];
 
+const MEANING: Record<string, string> = {
+  INTERESTED: "Positive intent — the contact wants to continue the conversation",
+  ASKED_QUESTION: "The contact asked something that needs an answer",
+  REQUESTED_LATER: "The contact asked to be contacted at a later time",
+  NOT_INTERESTED: "The contact declined",
+  UNSUBSCRIBE: "The contact asked not to be contacted again",
+  OUT_OF_OFFICE: "Automatic away / out-of-office reply",
+  UNKNOWN: "Unclear — a human should read it",
+};
+
 export default function Replies() {
   const [filter, setFilter] = useState("");
-  const replies = useAsync(() => api.get<Reply[]>(`/replies${filter === "attention" ? "?needs_attention=true" : filter ? `?classification=${filter}` : ""}`), [filter]);
+  const replies = useAsync(
+    () => api.get<ReplyWithContext[]>(`/replies${filter === "attention" ? "?needs_attention=true" : filter ? `?classification=${filter}` : ""}`),
+    [filter],
+  );
   const action = useAction();
 
   async function analyze(id: string) {
@@ -20,32 +33,74 @@ export default function Replies() {
   return (
     <>
       <div className="page-header">
-        <h1>Replies</h1>
+        <div>
+          <h1>Replies</h1>
+          <p className="muted page-sub">Backend rules act first (any reply stops follow-ups; opt-out language suppresses instantly). The Reply Analysis Agent then classifies and recommends.</p>
+        </div>
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="">All replies</option>
           <option value="attention">Needs attention</option>
-          {CLASSES.map((c) => <option key={c} value={c}>{c.replace(/_/g, " ")}</option>)}
+          {CLASSES.map((c) => <option key={c} value={c}>{c === "UNSUBSCRIBE" ? "OPT OUT" : c.replace(/_/g, " ")}</option>)}
         </select>
       </div>
       <ErrorBanner error={replies.error ?? action.error} />
-      <Card>
-        {replies.data?.length === 0 && <Empty>No replies yet.</Empty>}
-        {replies.data?.map((r) => (
-          <div key={r.id} className="reply">
-            <div className="reply-head">
-              <Badge value={r.classification ?? "PENDING"} />
-              {r.requires_human_attention && <span className="badge warn">needs attention</span>}
-              {r.opt_out_detected && <span className="badge bad">opt-out enforced</span>}
-              <span className="muted small">{when(r.received_at)}</span>
-              <Link to={`/leads/${r.lead_id}`}>Open lead →</Link>
-            </div>
-            <blockquote>{r.body}</blockquote>
-            {r.summary && <p className="small">{r.summary}</p>}
-            {r.recommended_action && <p className="small"><b>Next:</b> {r.recommended_action}</p>}
-            {!r.analyzed_at && <button disabled={!!action.busy} onClick={() => analyze(r.id)}>Analyze now</button>}
-          </div>
-        ))}
-      </Card>
+      {replies.data?.length === 0 && <Card><Empty>No replies yet. Log one from a lead page or connect the inbound webhook.</Empty></Card>}
+      {replies.data?.map((r) => <ReplyCard key={r.id} r={r} analyzing={!!action.busy} onAnalyze={() => analyze(r.id)} />)}
     </>
+  );
+}
+
+function ReplyCard({ r, analyzing, onAnalyze }: { r: ReplyWithContext; analyzing: boolean; onAnalyze: () => void }) {
+  const cls = r.classification;
+  const byAgent = !!r.agent_run_id;
+  const detected: { ok: boolean; text: string }[] = [];
+  if (cls) detected.push({ ok: true, text: MEANING[cls] ?? cls });
+  detected.push(
+    r.opt_out_detected
+      ? { ok: true, text: "Explicit opt-out language (deterministic rule, before the AI)" }
+      : { ok: true, text: "No opt-out language found by the deterministic rule" },
+  );
+  if (cls) detected.push({ ok: true, text: byAgent ? "Classified by the Reply Analysis Agent" : "Classified by backend rules (no AI needed)" });
+
+  const actions: string[] = [];
+  if (r.followups_cancelled > 0) actions.push(`Automated follow-ups stopped (${r.followups_cancelled} cancelled)`);
+  if (r.followups_pending > 0) actions.push(`${r.followups_pending} follow-up(s) still pending`);
+  if (r.contact_suppressed) actions.push("Contact suppressed — all future outreach blocked");
+  if (r.contact_forgotten) actions.push("Forget Me applied — personal data erased");
+  if (r.requires_human_attention) actions.push("Human response required");
+
+  return (
+    <section className={`card reply-card cls-${cls ?? "pending"}`}>
+      <header className="reply-card-head">
+        <div className="reply-class">
+          <Badge value={cls ?? "PENDING"} />
+          <span className="muted small">Confidence: not reported by the agent</span>
+        </div>
+        <div className="actions">
+          <span className="muted small">{when(r.received_at)}</span>
+          <Link to={`/leads/${r.lead_id}`}>{r.company_name} →</Link>
+        </div>
+      </header>
+      <blockquote>{r.body}</blockquote>
+      {!r.analyzed_at ? (
+        <div className="actions"><span className="muted small">Analysis queued for the worker.</span><button disabled={analyzing} onClick={onAnalyze}>Analyze now</button></div>
+      ) : (
+        <div className="grid-3 reply-explain">
+          <div>
+            <h3>Detected</h3>
+            <ul className="checklist">{detected.map((d) => <li key={d.text} className="pass"><span>✓</span> {d.text}</li>)}</ul>
+            {r.summary && <p className="small">{r.summary}</p>}
+          </div>
+          <div>
+            <h3>Recommended</h3>
+            <ul className="arrows">{r.recommended_action ? <li>→ {r.recommended_action}</li> : <li className="muted">—</li>}</ul>
+          </div>
+          <div>
+            <h3>Actions taken by backend</h3>
+            {actions.length ? <ul className="arrows">{actions.map((a) => <li key={a}>→ {a}</li>)}</ul> : <p className="muted small">None needed.</p>}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
