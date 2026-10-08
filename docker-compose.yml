@@ -1,0 +1,15 @@
+# Local PostgreSQL for development. Usage: docker compose up -d
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: growthos
+    ports:
+      - "5432:5432"
+    volumes:
+      - growthos_pg:/var/lib/postgresql/data
+      - ./docker/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+volumes:
+  growthos_pg:
