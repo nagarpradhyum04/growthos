@@ -269,12 +269,89 @@ class MockLLMProvider(LLMProvider):
             "UNKNOWN": "Read the reply and decide manually.",
         }
         snippet = " ".join((reply.get("body") or "").split())[:160]
+        intents, sentiment = self._intents(text)
+        if classification == "UNSUBSCRIBE":
+            intents = ["opt_out"]
+        suggested = "" if classification in ("UNSUBSCRIBE", "OUT_OF_OFFICE") else (
+            "Thanks for getting back to me! " + {
+                "INTERESTED": "Would Tuesday or Thursday afternoon work for a short call?",
+                "ASKED_QUESTION": "Good question — let me get you an accurate answer and come back to you shortly.",
+                "REQUESTED_LATER": "Happy to reconnect later — I'll reach out at the time you mentioned.",
+                "NOT_INTERESTED": "Understood, I appreciate you letting me know.",
+            }.get(classification, "I'll follow up with you personally."))
         return {
             "classification": classification,
             "summary": f"The contact replied: \"{snippet}\"" if snippet else "The reply was empty.",
             "recommended_action": actions[classification],
             "requires_human_attention": classification in {"INTERESTED", "ASKED_QUESTION", "REQUESTED_LATER", "UNKNOWN"},
+            "intents": intents,
+            "sentiment": sentiment,
+            "suggested_response": suggested,
         }
+
+    @staticmethod
+    def _intents(text: str) -> tuple[list[str], str]:
+        from app.services.escalation import detect
+
+        found = [i for i in detect(text) if i != "large_order"]
+        sentiment = "negative" if {"complaint", "refund"} & set(found) else (
+            "positive" if {"thanks", "purchase_intent", "meeting_request"} & set(found) else "neutral")
+        return found[:8], sentiment
+
+    # ---------------- email intelligence (customer messages) ----------------
+    def _email_intelligence(self, data: dict) -> dict:
+        text = data.get("message", "")
+        intents, sentiment = self._intents(text)
+        snippet = " ".join(text.split())[:160]
+        return {
+            "intents": intents,
+            "sentiment": sentiment,
+            "summary": f"The customer wrote: \"{snippet}\"",
+            "recommended_action": "Review and respond personally." if sentiment == "negative" else "Respond to the customer.",
+            "suggested_response": "Thank you for your message — we're looking into this and will get back to you shortly.",
+        }
+
+    # ---------------- product support (extractive, grounded) ----------------
+    def _support(self, data: dict) -> dict:
+        question = data.get("question", "")
+        q_words = _words(question) | {w for w in re.findall(r"[a-z0-9]{3,}", question.lower())}
+        best, best_score, best_sentences = None, 0, []
+        for ex in data.get("excerpts", []):
+            sentences = _sentences(ex["text"]) or [ex["text"]]
+            scored = sorted(((len(q_words & (_words(st) | set(re.findall(r"[a-z0-9]{3,}", st.lower())))), st)
+                             for st in sentences), reverse=True)
+            score = scored[0][0] if scored else 0
+            if score > best_score:
+                best, best_score, best_sentences = ex, score, [st for sc, st in scored[:2] if sc > 0]
+        if not best or best_score < 2:
+            return {"answerable": False, "answer": "", "source_ids": [], "escalate": False}
+        escalate = bool(re.search(r"\b(refund|broken|smoke|fire|replace (it|the unit)|warranty claim)\b", question.lower()))
+        return {"answerable": True, "answer": " ".join(best_sentences), "source_ids": [best["id"]], "escalate": escalate}
+
+    # ---------------- lifecycle ----------------
+    def _lifecycle(self, data: dict) -> dict:
+        customer = (data.get("customer") or {}).get("name", "").split(" ")[0] or "there"
+        product = (data.get("product") or {}).get("name", "your product")
+        business = (data.get("business_profile") or {}).get("company_name") or "The team"
+        event = data.get("event")
+        lines = {
+            "setup_help": (f"Need help setting up your {product}?",
+                           f"Hi {customer}, your {product} should have arrived recently. If you need any help with "
+                           "setup, the Product Support assistant in your portal can answer questions from the "
+                           "official documentation, or you can message us directly."),
+            "post_purchase_checkin": (f"How are you finding your {product}?",
+                                      f"Hi {customer}, we hope your {product} is working well for you. If anything "
+                                      "is unclear or not working as expected, just reply here — we're happy to help."),
+            "warranty_expiry_notice": (f"Your {product} warranty expires soon",
+                                       f"Hi {customer}, the warranty for your {product} expires on "
+                                       f"{data.get('warranty_expires_at')}. If you've noticed any issue, you can "
+                                       "submit a warranty claim from your portal before that date."),
+            "post_service": (f"How was your {product} service?",
+                             f"Hi {customer}, your recent service for your {product} has been completed. Was the "
+                             "experience satisfactory? Reply here if anything still isn't right."),
+        }
+        subject, body = lines.get(event, (f"About your {product}", f"Hi {customer}, just checking in on your {product}."))
+        return {"subject": subject, "body": f"{body}\n\n{business}"}
 
     # ---------------- analytics ----------------
     def _analytics(self, data: dict) -> dict:
@@ -295,4 +372,15 @@ class MockLLMProvider(LLMProvider):
         recs = ["Keep reviewing drafts for specific, evidence-based personalization."]
         if m.get("leads_qualified", 0) < m.get("leads_total", 0):
             recs.append("Focus outreach on qualified leads only.")
+        comps = [c for c in data.get("comparisons", []) if c.get("reply_rate_pct") is not None]
+        if len(comps) >= 2:
+            best, worst = max(comps, key=lambda c: c["reply_rate_pct"]), min(comps, key=lambda c: c["reply_rate_pct"])
+            if best["reply_rate_pct"] > worst["reply_rate_pct"]:
+                why = ("its emails used research-backed personalization more often "
+                       f"({best.get('personalized_pct')}% vs {worst.get('personalized_pct')}%)"
+                       if (best.get("personalized_pct") or 0) > (worst.get("personalized_pct") or 0)
+                       else "it targeted a different segment")
+                worked.append(f"Campaign '{best['campaign']}' reached a {best['reply_rate_pct']}% reply rate vs "
+                              f"{worst['reply_rate_pct']}% for '{worst['campaign']}'.")
+                recs.insert(0, f"Reuse the approach of '{best['campaign']}': {why}.")
         return {"summary": summary, "what_worked": worked, "what_did_not_work": not_worked, "recommendations": recs}

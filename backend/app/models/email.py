@@ -5,7 +5,7 @@ from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, Stri
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, OrgScoped, Timestamps, UUIDPk, str_enum
-from app.models.enums import EmailStatus, FollowupStatus, ReplyClassification
+from app.models.enums import EmailStatus, FollowupStatus, PriorityTier, ReplyClassification
 
 
 class EmailDraft(UUIDPk, Timestamps, OrgScoped, Base):
@@ -95,6 +95,12 @@ class EmailReply(UUIDPk, Timestamps, OrgScoped, Base):
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     recommended_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     requires_human_attention: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Email Intelligence: tier is decided by backend rules from detected intents (services/escalation.py).
+    tier: Mapped[PriorityTier | None] = mapped_column(str_enum(PriorityTier), nullable=True)
+    intents: Mapped[list] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
+    escalation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    suggested_response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sentiment: Mapped[str | None] = mapped_column(String(16), nullable=True)
     # True when the backend's deterministic opt-out detector fired (independent of the LLM).
     opt_out_detected: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

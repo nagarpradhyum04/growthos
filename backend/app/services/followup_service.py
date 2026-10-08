@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.errors import AgentFailedError, GrowthOSError
 from app.models import Campaign, Contact, Email, EmailDraft, Followup, Lead, Organization
-from app.models.enums import CampaignStatus, EmailStatus, FollowupStatus, LeadStatus
+from app.models.enums import CampaignStatus, EmailStatus, FollowupStatus, LeadStatus, TraceStatus, WorkflowState
 from app.services.common import (
     business_profile_context,
     campaign_context,
@@ -93,31 +93,49 @@ def generate_followup_email(db: Session, followup: Followup, container: Containe
 
 def process_followup(db: Session, followup: Followup, container: Container) -> str:
     """Handle one due follow-up. Returns an outcome label. Caller commits."""
+    from app.services import workflow_service as wfs
+
     if followup.status != FollowupStatus.PENDING:
         return "skipped_not_pending"
+    lead = db.get(Lead, followup.lead_id)
     reason = stop_reason(db, followup)
     if reason:
         followup.status = FollowupStatus.CANCELLED
         followup.cancel_reason = reason
+        wfs.advance_lead(db, lead, "followup", "Check follow-up", TraceStatus.BLOCKED,
+                         f"Follow-up {followup.sequence_number} stopped by rule: {reason.replace('_', ' ')}")
         return f"cancelled:{reason}"
     campaign = db.get(Campaign, followup.campaign_id)
     if campaign.status == CampaignStatus.PAUSED:
         return "waiting:campaign_paused"  # stays PENDING; resumes when the campaign resumes
     if followup.sequence_number > max_followups_for(campaign):
         _close_sequence(db, followup)
+        wfs.advance_lead(db, lead, "followup", "Check follow-up", TraceStatus.COMPLETED,
+                         f"No reply after {followup.sequence_number - 1} follow-up(s): limit reached, sequence closed",
+                         state=WorkflowState.COMPLETED)
         return "limit_reached"
     try:
         email = generate_followup_email(db, followup, container)
     except (AgentFailedError, GrowthOSError) as exc:
         followup.status = FollowupStatus.FAILED
         followup.cancel_reason = f"generation_failed: {exc.message}"[:200]
+        wfs.advance_lead(db, lead, "followup", "Write follow-up", TraceStatus.FAILED, exc.message)
         return "failed"
+    wfs.advance_lead(db, lead, "followup", "Write follow-up", TraceStatus.COMPLETED,
+                     f"Drafted follow-up {followup.sequence_number}: “{email.subject}” (uses previous emails from memory)",
+                     state=WorkflowState.DRAFTING)
+
+    from app.services.orchestrator import Orchestrator
+    from app.services.policy import evaluate_outbound
 
     org = db.get(Organization, followup.organization_id)
-    if org.automated_sending_enabled:
+    decision = evaluate_outbound(db, email)
+    if org.automated_sending_enabled and decision.outcome == "ALLOW":
         from app.services.email_service import approve_email, send_email
 
-        approve_email(email, None)
+        wfs.advance_lead(db, lead, "safety", "Check follow-up against policy", TraceStatus.COMPLETED,
+                         "ALLOW: automation rules permit sending without review", state=WorkflowState.SAFETY_CHECK)
+        approve_email(email, None, db)
         db.commit()
         try:
             send_email(db, email.id, org.id, container)  # still runs can_send()
@@ -125,6 +143,9 @@ def process_followup(db: Session, followup: Followup, container: Container) -> s
         except GrowthOSError as exc:
             logger.info("Automatic follow-up send blocked/failed: %s", exc.message)
             return "generated_send_blocked"
+    # Human decides: automation off, or the Safety Agent escalated/blocked it.
+    wf = wfs.active_lead_workflow(db, lead.id)
+    Orchestrator(db, container).safety_and_route(wf, lead, email)
     return "generated"
 
 

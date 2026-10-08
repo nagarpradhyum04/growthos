@@ -19,6 +19,7 @@ from app.services.common import (
     previous_interactions,
     qualification_context,
 )
+from app.services import memory_service
 from app.services.container import Container
 from app.services.llm.run_logger import RunContext
 from app.services.suppression import hash_email, is_suppressed, normalize_email
@@ -148,6 +149,7 @@ def generate_initial_email(db: Session, lead: Lead, container: Container) -> Ema
             "qualification": qualification_context(lead),
             "campaign": campaign_context(campaign),
             "previous_interactions": previous_interactions(db, contact.id),
+            "shared_memory": memory_service.lead_context(db, lead),
         },
         _ctx(lead),
     )

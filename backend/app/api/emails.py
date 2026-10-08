@@ -68,7 +68,7 @@ def update_email(email_id: uuid.UUID, body: EmailUpdate, cu: CurrentUser = Depen
 @router.post("/{email_id}/approve", response_model=EmailReviewOut)
 def approve(email_id: uuid.UUID, cu: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
     email = get_owned(db, Email, email_id, cu.org_id, for_update=True)
-    email_service.approve_email(email, cu.id)
+    email_service.approve_email(email, cu.id, db)
     db.commit()
     return _review(db, email)
 

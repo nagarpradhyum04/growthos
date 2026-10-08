@@ -41,6 +41,21 @@ class Container:
     def analytics_agent(self) -> AnalyticsAgent:
         return AnalyticsAgent(self.llm)
 
+    def email_intelligence_agent(self):
+        from app.services.agents.customer_agents import EmailIntelligenceAgent
+
+        return EmailIntelligenceAgent(self.llm)
+
+    def support_agent(self):
+        from app.services.agents.customer_agents import SupportAgent
+
+        return SupportAgent(self.llm)
+
+    def lifecycle_agent(self):
+        from app.services.agents.customer_agents import LifecycleAgent
+
+        return LifecycleAgent(self.llm)
+
 
 _container: Container | None = None
 

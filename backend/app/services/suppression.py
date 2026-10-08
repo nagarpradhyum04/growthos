@@ -112,7 +112,17 @@ def suppress_contact(db: Session, contact: Contact, reason: SuppressionReason, s
     cancel_pending_followups(db, contact.id, f"suppressed:{reason.value}")
     _block_unsent_emails(db, contact.id)
     _cancel_jobs_for(db, contact.lead_id, contact.id)
-    _refresh_lead_status(db, db.get(Lead, contact.lead_id))
+    lead = db.get(Lead, contact.lead_id)
+    _refresh_lead_status(db, lead)
+    from app.services import approval_service
+    from app.services import workflow_service as wfs
+    from app.models.enums import ApprovalStatus, TraceStatus, WorkflowState
+
+    approval_service.resolve_for(db, status=ApprovalStatus.CANCELLED, note=f"Contact suppressed ({reason.value})",
+                                 lead_id=lead.id)
+    wfs.advance_lead(db, lead, "safety", "Suppress contact", TraceStatus.BLOCKED,
+                     f"Contact suppressed ({reason.value.replace('_', ' ')}): pending follow-ups cancelled, "
+                     "unsent emails blocked, future outreach impossible", state=WorkflowState.BLOCKED)
     db.flush()
 
 
@@ -143,4 +153,10 @@ def forget_contact(db: Session, contact: Contact, source: str) -> None:
         for research in db.scalars(select(ResearchResult).where(ResearchResult.lead_id == lead.id)):
             db.delete(research)
         lead.notes = ""
+        from app.models import Approval
+        from app.services.memory_service import forget_subject
+
+        forget_subject(db, lead.organization_id, lead.id)
+        db.execute(update(Approval).where(Approval.lead_id == lead.id)
+                   .values(suggested_response="", status="CANCELLED"))
     db.flush()

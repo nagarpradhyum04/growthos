@@ -24,6 +24,10 @@ class User(UUIDPk, Timestamps, OrgScoped, Base):
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
+    # "owner" (business user) or "customer" (portal user, bound to one customer record).
+    role: Mapped[str] = mapped_column(String(16), default="owner", server_default="owner", nullable=False)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"),
+                                                          nullable=True)
 
     organization: Mapped[Organization] = relationship(back_populates="users")
 

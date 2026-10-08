@@ -15,7 +15,12 @@ from app.models.enums import (
     ReplyClassification,
     SuppressionReason,
 )
+from app.models.enums import ApprovalType, Priority, PriorityTier, TraceStatus, WorkflowState
+from app.services import approval_service, memory_service
+from app.services import workflow_service as wfs
 from app.services.common import get_owned, lead_context
+from app.services.escalation import triage
+from app.services.policy import get_policy
 from app.services.container import Container
 from app.services.llm.run_logger import RunContext
 from app.services.opt_out import OptOutType, detect_opt_out
@@ -74,6 +79,10 @@ def record_reply(db: Session, organization_id: uuid.UUID, *, subject: str, body:
     )
     db.flush()
 
+    wfs.advance_lead(db, lead, "email_intelligence", "Reply received", TraceStatus.COMPLETED,
+                     "Inbound reply matched to the sent email; pending follow-ups stopped by rule",
+                     state=WorkflowState.REPLY_RECEIVED)
+
     # Rule: explicit opt-out language suppresses right now, without waiting for the LLM.
     opt_out = detect_opt_out(f"{subject}\n{body}")
     if opt_out:
@@ -81,6 +90,12 @@ def record_reply(db: Session, organization_id: uuid.UUID, *, subject: str, body:
         reply.classification = ReplyClassification.UNSUBSCRIBE
         reply.recommended_action = "Do not contact this person again."
         reply.analyzed_at = datetime.now(timezone.utc)
+        reply.tier = PriorityTier.GREEN
+        reply.intents = ["opt_out"]
+        reply.escalation_reason = "Opt-out request: handled automatically by suppression rules (no human needed)"
+        wfs.advance_lead(db, lead, "safety", "Opt-out rule", TraceStatus.BLOCKED,
+                         "Explicit opt-out detected (deterministic rule): contact suppressed, all outreach blocked",
+                         state=WorkflowState.BLOCKED)
         if opt_out == OptOutType.FORGET:
             forget_contact(db, contact, source="reply")
             reply.summary = "The contact asked to be forgotten. Their data was erased."
@@ -112,11 +127,46 @@ def analyze_reply(db: Session, reply: EmailReply, container: Container) -> Email
         reply.classification = out.classification
     reply.summary = out.summary
     reply.recommended_action = out.recommended_action
-    reply.requires_human_attention = out.requires_human_attention
     reply.agent_run_id = result.run_id
     reply.analyzed_at = datetime.now(timezone.utc)
+    reply.sentiment = out.sentiment
+    reply.suggested_response = out.suggested_response or None
 
     if out.classification == ReplyClassification.UNSUBSCRIBE and not contact.suppressed:
         suppress_contact(db, contact, SuppressionReason.UNSUBSCRIBED, source="reply_analysis")
+
+    # Email Intelligence tiering: backend rules over text + LLM intents.
+    policy = get_policy(db, reply.organization_id)
+    t = triage(f"{reply.subject}\n{reply.body}", llm_intents=list(out.intents),
+               classification=reply.classification.value, sentiment=out.sentiment,
+               escalation_rules=policy.escalation_rules, large_order_threshold=float(policy.large_order_threshold))
+    reply.tier = PriorityTier(t.tier)
+    reply.intents = t.intents
+    reply.escalation_reason = t.reason
+    reply.requires_human_attention = bool(out.requires_human_attention or t.escalate)
+
+    memory_service.remember(db, reply.organization_id, scope="lead", subject_id=lead.id, category="conversation",
+                            key=f"reply:{reply.id}", content=f"Replied ({reply.classification.value}, {t.tier}): {out.summary}",
+                            source="email_intelligence", data={"intents": t.intents, "sentiment": out.sentiment})
+    wfs.advance_lead(db, lead, "email_intelligence", "Classify reply",
+                     TraceStatus.ESCALATED if t.escalate else TraceStatus.COMPLETED,
+                     f"{reply.classification.value.replace('_', ' ')} · {t.tier} — {t.reason}",
+                     detail={"tier": t.tier, "intents": t.intents, "evidence": t.evidence})
+    if t.escalate:
+        approval_service.create(
+            db, reply.organization_id, ApprovalType.REPLY_ESCALATION,
+            title=f"{lead.company_name} replied: {reply.classification.value.replace('_', ' ').lower()}",
+            reason=t.reason, tier=PriorityTier(t.tier), category=t.category,
+            priority=Priority.URGENT if t.tier == "RED" else Priority.HIGH,
+            recommended_action=out.recommended_action, suggested_response=out.suggested_response or "",
+            reply_id=reply.id, lead_id=lead.id)
+        wfs.advance_lead(db, lead, "human", "Escalate to business owner", TraceStatus.WAITING,
+                         "Waiting for the owner to respond or take over", state=WorkflowState.ESCALATED)
+    elif reply.classification == ReplyClassification.OUT_OF_OFFICE:
+        wfs.advance_lead(db, lead, "orchestrator", "Decide next step", TraceStatus.COMPLETED,
+                         "Auto-reply: nothing to do until the contact is back", state=WorkflowState.WAITING_FOR_REPLY)
+    elif not contact.suppressed:
+        wfs.advance_lead(db, lead, "orchestrator", "Decide next step", TraceStatus.COMPLETED,
+                         "Routine reply handled; no human action required", state=WorkflowState.COMPLETED)
     db.flush()
     return reply

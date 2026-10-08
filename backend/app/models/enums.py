@@ -18,6 +18,7 @@ class LeadStatus(StrEnum):
     REPLIED = "REPLIED"
     COMPLETED = "COMPLETED"
     SUPPRESSED = "SUPPRESSED"
+    CONVERTED = "CONVERTED"  # became a customer
 
 
 class EmailStatus(StrEnum):
@@ -79,3 +80,116 @@ class JobStatus(StrEnum):
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     CANCELLED = "CANCELLED"
+
+
+# ---------------- Orchestration ----------------
+class WorkflowType(StrEnum):
+    GOAL = "GOAL"  # a business goal broken into many lead workflows
+    LEAD = "LEAD"  # one lead's journey from research to reply
+    INBOUND = "INBOUND"  # an incoming email / customer message
+    LIFECYCLE = "LIFECYCLE"  # post-purchase customer journey
+
+
+class WorkflowState(StrEnum):
+    PENDING = "PENDING"
+    RESEARCHING = "RESEARCHING"
+    QUALIFYING = "QUALIFYING"
+    DRAFTING = "DRAFTING"
+    SAFETY_CHECK = "SAFETY_CHECK"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    READY_TO_SEND = "READY_TO_SEND"
+    SENT = "SENT"
+    WAITING_FOR_REPLY = "WAITING_FOR_REPLY"
+    REPLY_RECEIVED = "REPLY_RECEIVED"
+    ESCALATED = "ESCALATED"
+    FOLLOW_UP_SCHEDULED = "FOLLOW_UP_SCHEDULED"
+    COMPLETED = "COMPLETED"
+    BLOCKED = "BLOCKED"
+    FAILED = "FAILED"
+
+
+TERMINAL_WORKFLOW_STATES = {WorkflowState.COMPLETED, WorkflowState.BLOCKED, WorkflowState.FAILED}
+
+
+class TraceStatus(StrEnum):
+    STARTED = "STARTED"
+    COMPLETED = "COMPLETED"
+    SKIPPED = "SKIPPED"
+    WAITING = "WAITING"
+    ESCALATED = "ESCALATED"
+    BLOCKED = "BLOCKED"
+    FAILED = "FAILED"
+    RETRYING = "RETRYING"
+
+
+# ---------------- Email intelligence & escalation ----------------
+class PriorityTier(StrEnum):
+    GREEN = "GREEN"  # routine
+    YELLOW = "YELLOW"  # important opportunity
+    RED = "RED"  # needs human attention
+
+
+class ApprovalType(StrEnum):
+    OUTBOUND_EMAIL = "OUTBOUND_EMAIL"
+    REPLY_ESCALATION = "REPLY_ESCALATION"
+    MESSAGE_ESCALATION = "MESSAGE_ESCALATION"
+    WARRANTY_CLAIM = "WARRANTY_CLAIM"
+    SERVICE_REQUEST = "SERVICE_REQUEST"
+
+
+class ApprovalStatus(StrEnum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    TAKEN_OVER = "TAKEN_OVER"
+    AUTOMATED = "AUTOMATED"
+    RESOLVED = "RESOLVED"
+    CANCELLED = "CANCELLED"
+
+
+class Priority(StrEnum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    URGENT = "URGENT"
+
+
+# ---------------- Customers ----------------
+class UserRole(StrEnum):
+    OWNER = "owner"
+    CUSTOMER = "customer"
+
+
+class CustomerStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+
+class PurchaseStatus(StrEnum):
+    ACTIVE = "ACTIVE"
+    IN_SERVICE = "IN_SERVICE"
+    RETIRED = "RETIRED"
+
+
+class WarrantyStatus(StrEnum):
+    SUBMITTED = "SUBMITTED"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    MORE_INFORMATION_REQUIRED = "MORE_INFORMATION_REQUIRED"
+    COMPLETED = "COMPLETED"
+
+
+class ServiceStatus(StrEnum):
+    PENDING_CONFIRMATION = "PENDING_CONFIRMATION"
+    CONFIRMED = "CONFIRMED"
+    RESCHEDULED = "RESCHEDULED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
+
+
+class MessageSender(StrEnum):
+    CUSTOMER = "customer"
+    BUSINESS = "business"
+    AI = "ai"

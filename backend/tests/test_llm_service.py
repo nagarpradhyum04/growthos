@@ -30,7 +30,7 @@ def test_valid_output_is_parsed():
     result = _run(_service(ScriptedProvider(VALID)))
     assert result.output.classification == "INTERESTED"
     assert result.attempts == 1
-    assert result.prompt_version == "reply_analysis_v1"
+    assert result.prompt_version == "reply_analysis_v2"
 
 
 def test_system_prompt_contains_versioned_prompt_and_schema():
@@ -104,7 +104,7 @@ def test_runs_are_logged_with_metadata(db):
     _run(service, ctx=RunContext(organization_id=org.id))
     run = db.scalar(select(AgentRun))
     assert run.status == AgentRunStatus.SUCCEEDED
-    assert run.agent_name == "reply_analysis" and run.prompt_version == "reply_analysis_v1"
+    assert run.agent_name == "reply_analysis" and run.prompt_version == "reply_analysis_v2"
     assert run.model == "test-model" and run.provider == "scripted"
     assert run.latency_ms is not None and run.completed_at is not None
     assert run.output["classification"] == "INTERESTED"

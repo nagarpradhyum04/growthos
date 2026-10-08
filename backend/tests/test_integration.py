@@ -220,7 +220,10 @@ def test_orchestrator_job_runs_pipeline_and_never_sends(client, auth, lead, db, 
     assert run_once()["jobs"] == 1
     result = client.get(f"/jobs/{job.json()['id']}", headers=auth).json()
     assert result["status"] == "SUCCEEDED"
-    assert [s["status"] for s in result["result"]["steps"]] == ["done", "done", "done"]
+    assert [(s["step"], s["status"]) for s in result["result"]["steps"]] == [
+        ("research", "done"), ("qualification", "done"), ("outreach", "done"), ("safety", "done"),
+        ("human_review", "done")]
+    assert result["result"]["state"] == "AWAITING_APPROVAL"
     detail = client.get(f"/leads/{lead['id']}", headers=auth).json()
     assert detail["status"] == "DRAFTED" and detail["emails"][0]["status"] == "DRAFT"
     assert email_provider.outbox == []

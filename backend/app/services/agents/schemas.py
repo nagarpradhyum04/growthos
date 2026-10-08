@@ -103,11 +103,52 @@ FollowupOutput = EmailContentOutput
 
 
 # ---------------- Reply analysis ----------------
+IntentName = Literal[
+    "greeting", "thanks", "routine_question", "brochure_request", "meeting_request", "pricing_inquiry",
+    "discount_request", "purchase_intent", "large_order", "complaint", "refund", "warranty_dispute", "legal",
+    "contract", "sensitive", "opt_out", "out_of_office", "not_interested",
+]
+Sentiment = Literal["positive", "neutral", "negative", "angry"]
+
+
 class ReplyAnalysisOutput(BaseModel):
     classification: ReplyClassification
     summary: str = Field(min_length=1, max_length=1000)
     recommended_action: str = Field(min_length=1, max_length=500)
     requires_human_attention: bool
+    # v2 (Email Intelligence) fields; optional so v1 outputs stay valid.
+    intents: list[IntentName] = Field(default_factory=list, max_length=8)
+    sentiment: Sentiment = "neutral"
+    suggested_response: str = Field(default="", max_length=2000)
+
+
+class MessageAnalysisOutput(BaseModel):
+    """Email Intelligence for customer messages. The tier/escalation is decided by backend rules."""
+
+    intents: list[IntentName] = Field(default_factory=list, max_length=8)
+    sentiment: Sentiment = "neutral"
+    summary: str = Field(min_length=1, max_length=1000)
+    recommended_action: str = Field(min_length=1, max_length=500)
+    suggested_response: str = Field(default="", max_length=2000)
+
+
+class SupportAnswerOutput(BaseModel):
+    answerable: bool
+    answer: str = Field(default="", max_length=3000)
+    source_ids: list[str] = Field(default_factory=list, max_length=8)
+    escalate: bool = False
+
+
+class LifecycleMessageOutput(BaseModel):
+    subject: str = Field(min_length=1, max_length=150)
+    body: str = Field(min_length=10, max_length=1500)
+
+    @field_validator("subject", "body")
+    @classmethod
+    def _no_placeholders(cls, v: str) -> str:
+        if _PLACEHOLDER_RE.search(v):
+            raise ValueError("contains an unfilled template placeholder")
+        return v.strip()
 
 
 # ---------------- Analytics ----------------

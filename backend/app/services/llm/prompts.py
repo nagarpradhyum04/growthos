@@ -13,10 +13,13 @@ PROMPT_DIR = Path(__file__).parent / "prompts"
 ACTIVE_PROMPT_VERSIONS: dict[str, str] = {
     "research": "v1",
     "qualification": "v1",
-    "outreach": "v1",
+    "outreach": "v2",
     "followup": "v1",
-    "reply_analysis": "v1",
-    "analytics": "v1",
+    "reply_analysis": "v2",
+    "analytics": "v2",
+    "email_intelligence": "v1",
+    "support": "v1",
+    "lifecycle": "v1",
 }
 
 

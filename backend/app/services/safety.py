@@ -20,6 +20,8 @@ SUPPRESSION_REASONS = {"contact_suppressed", "contact_unsubscribed", "suppressio
 class SendDecision:
     allowed: bool
     reasons: list[str] = field(default_factory=list)
+    # Policy-layer findings with human-readable detail (frequency limits, targeting, content rules).
+    findings: list = field(default_factory=list)
 
     @property
     def suppressed(self) -> bool:
@@ -118,7 +120,13 @@ def can_send(db: Session, email: Email) -> SendDecision:
     if duplicate_email_exists(db, email, contact):
         reasons.append("duplicate_email")
 
-    return SendDecision(allowed=not reasons, reasons=reasons)
+    # --- business policy (frequency, targeting, content) ---
+    from app.services.policy import hard_findings
+
+    findings = hard_findings(db, email, contact)
+    reasons += [f.code for f in findings]
+
+    return SendDecision(allowed=not reasons, reasons=reasons, findings=findings)
 
 
 # Human-readable view of can_send(): one row per rule, derived from the decision's reason codes.
@@ -133,14 +141,19 @@ SAFETY_CHECKS: list[tuple[str, str, tuple[str, ...]]] = [
     ("followup_limit", "Follow-up limit not exceeded", ("followup_limit_reached",)),
     ("sequence_order", "Previous sequence step was sent", ("previous_step_not_sent",)),
     ("no_duplicate", "Not a duplicate / not already sent", ("already_sent", "duplicate_email")),
+    ("frequency", "Frequency limits respected", ("frequency_limit_reached", "too_soon_since_last_message")),
+    ("targeting", "Recipient matches targeting rules", ("blocked_domain",)),
+    ("content", "Content policy (banned phrases, required content)", ("banned_phrase", "missing_content")),
     ("human_approved", "Approved by a human", ("not_approved",)),
 ]
 
 
 def describe_checks(decision: SendDecision) -> list[dict]:
     failed = set(decision.reasons)
+    details = {f.code: f.detail for f in decision.findings}
     checks = [
-        {"key": key, "label": label, "passed": not (failed & set(codes)), "reasons": sorted(failed & set(codes))}
+        {"key": key, "label": label, "passed": not (failed & set(codes)), "reasons": sorted(failed & set(codes)),
+         **({"detail": "; ".join(details[c] for c in codes if c in details)} if any(c in details for c in codes) else {})}
         for key, label, codes in SAFETY_CHECKS
     ]
     known = {c for _, _, codes in SAFETY_CHECKS for c in codes}

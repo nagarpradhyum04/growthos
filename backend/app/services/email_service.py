@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.errors import ExternalServiceError, InvalidStateError, SendBlockedError
 from app.models import Campaign, Contact, Email, Followup, Lead, Organization
-from app.models.enums import EmailStatus, FollowupStatus, LeadStatus
+from app.models.enums import ApprovalStatus, EmailStatus, FollowupStatus, LeadStatus, TraceStatus, WorkflowState
+from app.services import approval_service
+from app.services import workflow_service as wfs
 from app.security import create_unsubscribe_token
 from app.services.container import Container
 from app.services.email import EmailSendError, OutgoingEmail
@@ -36,12 +38,19 @@ def update_email_content(email: Email, subject: str, body: str) -> Email:
     return email
 
 
-def approve_email(email: Email, user_id: uuid.UUID | None) -> Email:
+def approve_email(email: Email, user_id: uuid.UUID | None, db: Session | None = None) -> Email:
     if email.status not in (EmailStatus.DRAFT, EmailStatus.APPROVED, EmailStatus.FAILED):
         raise InvalidStateError(f"An email in status {email.status} cannot be approved.")
     email.status = EmailStatus.APPROVED
     email.approved_at = datetime.now(timezone.utc)
     email.approved_by_user_id = user_id
+    if db is not None:
+        who = "the business owner" if user_id else "automation rules"
+        approval_service.resolve_for(db, status=ApprovalStatus.APPROVED if user_id else ApprovalStatus.AUTOMATED,
+                                     user_id=user_id, email_id=email.id)
+        wfs.advance_lead(db, db.get(Lead, email.lead_id), "human" if user_id else "orchestrator",
+                         "Approve email", TraceStatus.COMPLETED, f"“{email.subject}” approved by {who}",
+                         state=WorkflowState.READY_TO_SEND)
     return email
 
 
@@ -57,6 +66,9 @@ def reject_email(db: Session, email: Email) -> None:
         Followup.__table__.update().where(Followup.email_id == email.id)
         .values(status=FollowupStatus.CANCELLED, cancel_reason="draft_rejected_by_reviewer")
     )
+    approval_service.resolve_for(db, status=ApprovalStatus.REJECTED, note="Draft rejected", email_id=email.id)
+    wfs.advance_lead(db, lead, "human", "Reject draft", TraceStatus.COMPLETED,
+                     f"Reviewer rejected “{email.subject}” — it will not be sent", state=WorkflowState.COMPLETED)
     db.delete(email)
     db.flush()
 
@@ -85,8 +97,14 @@ def send_email(db: Session, email_id: uuid.UUID, organization_id: uuid.UUID, con
         if decision.suppressed and email.status not in (EmailStatus.SENT, EmailStatus.DELIVERED,
                                                         EmailStatus.REPLIED, EmailStatus.COMPLETED):
             email.status = EmailStatus.SUPPRESSED
+        explanation = "; ".join(f.detail for f in decision.findings) or ", ".join(
+            r.replace("_", " ") for r in decision.reasons)
+        wfs.advance_lead(db, db.get(Lead, email.lead_id), "safety", "Send gate (can_send)", TraceStatus.BLOCKED,
+                         f"Send blocked: {explanation}", detail={"reasons": decision.reasons},
+                         state=WorkflowState.BLOCKED if decision.suppressed else None)
         db.commit()
-        raise SendBlockedError("This email cannot be sent.", details={"reasons": decision.reasons})
+        raise SendBlockedError("This email cannot be sent.",
+                               details={"reasons": decision.reasons, "explanation": explanation})
 
     contact = db.get(Contact, email.contact_id)
     org = db.get(Organization, email.organization_id)
@@ -118,12 +136,19 @@ def send_email(db: Session, email_id: uuid.UUID, organization_id: uuid.UUID, con
     if lead.status not in (LeadStatus.SUPPRESSED, LeadStatus.REPLIED):
         lead.status = LeadStatus.CONTACTED
     lead.last_activity_at = now
-    _schedule_next_followup(db, email, now)
+    followup = _schedule_next_followup(db, email, now)
+    label = "Initial email" if email.sequence_number == 0 else f"Follow-up {email.sequence_number}"
+    wfs.advance_lead(db, lead, "safety", "Send gate (can_send)", TraceStatus.COMPLETED,
+                     f"{label} passed every safety rule and was sent", state=WorkflowState.SENT)
+    if followup is not None:
+        wfs.advance_lead(db, lead, "followup", "Schedule follow-up", TraceStatus.COMPLETED,
+                         f"Step {followup.sequence_number} checks for a reply on {followup.due_at:%Y-%m-%d}",
+                         state=WorkflowState.WAITING_FOR_REPLY)
     db.commit()
     return email
 
 
-def _schedule_next_followup(db: Session, email: Email, sent_at: datetime) -> None:
+def _schedule_next_followup(db: Session, email: Email, sent_at: datetime) -> Followup | None:
     """Create the next follow-up step. Steps beyond the limit are still created so the worker can
     close the sequence (LIMIT_REACHED) once the wait is over without a reply."""
     campaign = db.get(Campaign, email.campaign_id)
@@ -132,12 +157,14 @@ def _schedule_next_followup(db: Session, email: Email, sent_at: datetime) -> Non
                                   Followup.sequence_number == email.sequence_number + 1)
     )
     if exists:
-        return
-    db.add(Followup(organization_id=email.organization_id, campaign_id=email.campaign_id, lead_id=email.lead_id,
-                    contact_id=email.contact_id, previous_email_id=email.id,
-                    sequence_number=email.sequence_number + 1,
-                    due_at=sent_at + timedelta(days=followup_delay_days_for(campaign)),
-                    status=FollowupStatus.PENDING))
+        return None
+    followup = Followup(organization_id=email.organization_id, campaign_id=email.campaign_id, lead_id=email.lead_id,
+                        contact_id=email.contact_id, previous_email_id=email.id,
+                        sequence_number=email.sequence_number + 1,
+                        due_at=sent_at + timedelta(days=followup_delay_days_for(campaign)),
+                        status=FollowupStatus.PENDING)
+    db.add(followup)
+    return followup
 
 
 def mark_delivered(db: Session, provider_message_id: str) -> Email | None:
