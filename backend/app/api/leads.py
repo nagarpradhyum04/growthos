@@ -1,11 +1,13 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, container, current_user
 from app.db import get_db
+from app.errors import GrowthOSError
 from app.models import AgentRun, Campaign, Contact, Email, EmailReply, Followup, Lead
 from app.models.enums import LeadStatus
 from app.schemas import (
@@ -71,6 +73,38 @@ def create_lead(body: LeadCreate, cu: CurrentUser = Depends(current_user), db: S
     )
     db.commit()
     return _detail(db, lead)
+
+
+class ProspectIn(BaseModel):
+    company_name: str = Field(min_length=1, max_length=200)
+    website: str = Field(default="", max_length=500)
+    notes: str = Field(default="", max_length=5000)
+    contact_name: str = Field(default="", max_length=200)
+    contact_role: str = Field(default="", max_length=200)
+    contact_email: EmailStr
+
+
+class BulkLeadsIn(BaseModel):
+    campaign_id: uuid.UUID
+    prospects: list[ProspectIn] = Field(min_length=1, max_length=200)
+
+
+@router.post("/bulk", status_code=201)
+def bulk_create(body: BulkLeadsIn, cu: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Import a prospect list. Each row passes the same suppression/duplicate checks as a single lead."""
+    results = []
+    for p in body.prospects:
+        try:
+            with db.begin_nested():
+                lead = lead_service.create_lead(db, cu.org_id, campaign_id=body.campaign_id,
+                                                company_name=p.company_name, website=p.website, notes=p.notes,
+                                                contact_name=p.contact_name, contact_role=p.contact_role,
+                                                contact_email=str(p.contact_email))
+            results.append({"company_name": p.company_name, "status": "created", "lead_id": str(lead.id)})
+        except GrowthOSError as exc:
+            results.append({"company_name": p.company_name, "status": "skipped", "reason": exc.message})
+    db.commit()
+    return {"created": sum(r["status"] == "created" for r in results), "results": results}
 
 
 @router.get("/{lead_id}", response_model=LeadDetail)

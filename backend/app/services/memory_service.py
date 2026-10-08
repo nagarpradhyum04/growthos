@@ -103,3 +103,24 @@ def customer_context(db: Session, customer: Customer, limit_messages: int = 10) 
         "recent_messages": [{"from": m.sender.value, "body": m.body[:500]} for m in reversed(messages)],
         "memory": as_context(recall(db, customer.organization_id, scope="customer", subject_id=customer.id, limit=10)),
     }
+
+
+def store_research(db: Session, lead, research, workflow_id=None) -> int:
+    """Research Agent -> shared memory: only verified, non-unknown facts."""
+    d = research.data
+    facts = {"industry": d.get("industry"), "company_size": d.get("company_size"),
+             "signals": "; ".join(d.get("relevant_signals", [])), "pain_points": "; ".join(d.get("likely_pain_points", []))}
+    stored = 0
+    for key, value in facts.items():
+        if value and str(value).lower() != "unknown":
+            remember(db, lead.organization_id, scope="lead", subject_id=lead.id, category="research", key=key,
+                     content=str(value), source="research", workflow_id=workflow_id,
+                     data={"confidence": research.confidence})
+            stored += 1
+    return stored
+
+
+def store_qualification(db: Session, lead) -> None:
+    remember(db, lead.organization_id, scope="lead", subject_id=lead.id, category="result", key="qualification",
+             content=f"Scored {lead.qualification_score}/100 ({'qualified' if lead.qualified else 'not qualified'}): "
+                     f"{lead.qualification_reason}", source="qualification")

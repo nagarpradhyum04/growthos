@@ -88,6 +88,8 @@ def research_lead(db: Session, lead: Lead, container: Container) -> ResearchResu
     research = ResearchResult(organization_id=lead.organization_id, lead_id=lead.id, agent_run_id=result.run_id,
                               data=data, confidence=result.output.confidence)
     db.add(research)
+    db.flush()
+    research.memory_facts_stored = memory_service.store_research(db, lead, research)
     if lead.status in (LeadStatus.NEW, LeadStatus.RESEARCHED):
         _touch(lead, LeadStatus.RESEARCHED)
     else:
@@ -114,6 +116,7 @@ def qualify_lead(db: Session, lead: Lead, container: Container) -> Lead:
     lead.qualification_reason = result.reason
     lead.recommended_angle = result.recommended_angle
     lead.qualification_breakdown = result.breakdown
+    memory_service.store_qualification(db, lead)
     if lead.status in (LeadStatus.NEW, LeadStatus.RESEARCHED, LeadStatus.QUALIFIED, LeadStatus.DISQUALIFIED):
         _touch(lead, LeadStatus.QUALIFIED if result.qualified else LeadStatus.DISQUALIFIED)
     else:

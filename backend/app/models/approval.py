@@ -27,7 +27,7 @@ class Approval(UUIDPk, Timestamps, OrgScoped, Base):
     lead_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("leads.id", ondelete="CASCADE"), nullable=True)
     customer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("customers.id", ondelete="CASCADE"),
                                                           nullable=True)
-    email_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("emails.id", ondelete="CASCADE"), index=True,
+    email_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("emails.id", ondelete="SET NULL"), index=True,
                                                        nullable=True)
     reply_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("email_replies.id", ondelete="CASCADE"),
                                                        nullable=True)

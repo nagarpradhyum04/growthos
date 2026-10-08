@@ -6,6 +6,8 @@ import logging
 import signal
 import time
 
+from sqlalchemy import select
+
 from app.config import get_settings
 from app.db import SessionLocal
 from app.logging_config import configure_logging
@@ -34,6 +36,17 @@ def run_once(max_jobs: int = 20) -> dict:
         except Exception:  # noqa: BLE001
             db.rollback()
             logger.exception("Follow-up processing failed")
+        try:
+            from app.models import Organization
+            from app.services.lifecycle_service import process_lifecycle
+
+            for org_id in db.scalars(select(Organization.id)).all():
+                out = process_lifecycle(db, get_container(), org_id)
+                if out["sent"]:
+                    stats.setdefault("lifecycle", {})[str(org_id)] = out
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            logger.exception("Lifecycle processing failed")
         for _ in range(max_jobs):
             job = jobs.claim_next(db)
             if job is None:

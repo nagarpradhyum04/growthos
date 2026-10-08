@@ -34,6 +34,7 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    role: str = "owner"
 
 
 class UserOut(ORM):
@@ -41,6 +42,7 @@ class UserOut(ORM):
     email: str
     name: str
     organization_id: uuid.UUID
+    role: str = "owner"
 
 
 class OrganizationOut(ORM):

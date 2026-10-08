@@ -116,10 +116,6 @@ class Orchestrator:
             wfs.record(db, wf, "qualification", "Score lead", TraceStatus.SKIPPED,
                        f"Already scored {lead.qualification_score}/100", state=WorkflowState.QUALIFYING)
             result.steps.append(StepResult("qualification", "skipped", "Already qualified"))
-        memory_service.remember(db, lead.organization_id, scope="lead", subject_id=lead.id, category="result",
-                                key="qualification", content=f"Scored {lead.qualification_score}/100 "
-                                f"({'qualified' if lead.qualified else 'not qualified'}): {lead.qualification_reason}",
-                                source="qualification", workflow_id=wf.id)
         if not lead.qualified:
             wfs.record(db, wf, "orchestrator", "Decide next step", TraceStatus.COMPLETED,
                        f"Stop: not qualified (score {lead.qualification_score}). No outreach will be written.",
@@ -302,18 +298,8 @@ class Orchestrator:
         return None
 
     def _store_research_memory(self, wf: Workflow, lead: Lead, research) -> None:
-        d = research.data
-        facts = {
-            "industry": d.get("industry"), "company_size": d.get("company_size"),
-            "signals": "; ".join(d.get("relevant_signals", [])), "pain_points": "; ".join(d.get("likely_pain_points", [])),
-        }
-        stored = 0
-        for key, value in facts.items():
-            if value and value != "unknown":
-                memory_service.remember(self.db, lead.organization_id, scope="lead", subject_id=lead.id,
-                                        category="research", key=key, content=str(value), source="research",
-                                        workflow_id=wf.id, data={"confidence": research.confidence})
-                stored += 1
+        # lead_service.research_lead already wrote the facts; record it in the trace.
+        stored = getattr(research, "memory_facts_stored", 0)
         wfs.record(self.db, wf, "memory", "Write research to shared memory", TraceStatus.COMPLETED,
                    f"Stored {stored} verified fact(s) for other agents" if stored else "Nothing verifiable to store")
         self.db.commit()

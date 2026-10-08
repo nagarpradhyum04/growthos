@@ -37,7 +37,15 @@ def generate_insights(db: Session, job: Job) -> dict:
     return analytics_service.generate_insights(db, job.organization_id, get_container())
 
 
+def run_goal(db: Session, job: Job) -> dict:
+    from app.models import Workflow
+
+    wf = get_owned(db, Workflow, uuid.UUID(job.payload["workflow_id"]), job.organization_id)
+    return Orchestrator(db, get_container()).run_goal(wf, int(job.payload.get("max_leads", 25)))
+
+
 HANDLERS = {
+    "run_goal": run_goal,
     "process_lead": process_lead,
     "analyze_reply": analyze_reply,
     "send_scheduled_email": send_scheduled_email,

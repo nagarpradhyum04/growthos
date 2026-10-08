@@ -7,7 +7,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from app.api import analytics, auth, campaigns, contacts, emails, leads, organization, public, replies, system, webhooks
+from app.api import (
+    analytics,
+    approvals,
+    auth,
+    campaigns,
+    care,
+    contacts,
+    customers,
+    emails,
+    leads,
+    memory,
+    organization,
+    policy,
+    portal,
+    products,
+    public,
+    replies,
+    system,
+    webhooks,
+    workflows,
+)
 from app.config import get_settings
 from app.errors import GrowthOSError
 from app.logging_config import configure_logging
@@ -65,5 +85,6 @@ def health():
     return {"status": "ok"}
 
 
-for module in (auth, organization, campaigns, leads, emails, replies, contacts, analytics, system, public, webhooks):
+for module in (auth, organization, campaigns, leads, emails, replies, contacts, analytics, system, public, webhooks,
+               workflows, approvals, memory, policy, customers, products, care, portal):
     app.include_router(module.router)

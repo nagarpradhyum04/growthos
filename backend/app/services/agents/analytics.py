@@ -24,8 +24,10 @@ class AnalyticsAgent(BaseAgent):
     name = "analytics"
     prompt_name = "analytics"
 
-    def run(self, metrics: dict, ctx: RunContext | None = None) -> AnalyticsResult:
+    def run(self, metrics: dict, ctx: RunContext | None = None, comparisons: list[dict] | None = None) -> AnalyticsResult:
         input_data = {"metrics": metrics}
+        if comparisons:
+            input_data["comparisons"] = comparisons
         allowed = _numbers(json.dumps(input_data))
 
         def validate(out: AnalyticsOutput) -> list[str]:

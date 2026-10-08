@@ -157,3 +157,39 @@ def lead_to_sent(client, auth, lead_id: str) -> dict:
     sent = client.post(f"/emails/{email['id']}/send", headers=auth)
     assert sent.status_code == 200, sent.text
     return sent.json()
+
+
+MANUAL = """# Setup
+Place the AP-500 on a flat surface at least 30 cm from walls. Remove the plastic wrap from the HEPA filter before first use.
+
+# Filter replacement
+Replace the HEPA filter every 6 months. The filter indicator turns red when replacement is due. Clean the pre-filter monthly with a vacuum.
+
+# Error codes
+E1 means the filter is not seated correctly. E2 means the fan is blocked; switch off and remove obstructions.
+"""
+WARRANTY = """# Coverage
+The AP-500 is covered for 24 months from the purchase date against manufacturing defects.
+
+# Exclusions
+Physical damage, water damage and use of non-original filters are not covered.
+"""
+
+
+def make_product_and_customer(client, auth, purchased_at="2026-09-01", email="pat@clinic.example", password="portal-pass-123"):
+    product = client.post("/products", headers=auth, json={"name": "AP-500 Air Purifier", "sku": "AP500",
+                                                           "category": "Air purifier", "warranty_months": 24,
+                                                           "description": "Commercial HEPA air purifier"}).json()
+    client.post("/knowledge", headers=auth, json={"title": "AP-500 Manual", "doc_type": "manual", "content": MANUAL,
+                                                  "product_id": product["id"]})
+    client.post("/knowledge", headers=auth, json={"title": "Warranty policy", "doc_type": "warranty_policy",
+                                                  "content": WARRANTY, "product_id": product["id"]})
+    customer = client.post("/customers", headers=auth, json={"name": "Pat Lee", "email": email,
+                                                             "company": "Northside Clinic"}).json()
+    purchase = client.post(f"/customers/{customer['id']}/purchases", headers=auth,
+                           json={"product_id": product["id"], "purchased_at": purchased_at,
+                                 "serial_number": "SN-1001", "order_value": 4000}).json()
+    client.post(f"/customers/{customer['id']}/portal-access", headers=auth, json={"password": password})
+    token = client.post("/auth/login", json={"email": email, "password": password}).json()
+    portal = {"Authorization": f"Bearer {token['access_token']}"}
+    return product, customer, purchase, portal

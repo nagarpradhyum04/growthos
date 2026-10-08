@@ -313,19 +313,21 @@ class MockLLMProvider(LLMProvider):
 
     # ---------------- product support (extractive, grounded) ----------------
     def _support(self, data: dict) -> dict:
-        question = data.get("question", "")
-        q_words = _words(question) | {w for w in re.findall(r"[a-z0-9]{3,}", question.lower())}
+        from app.services.knowledge_service import tokens
+
+        q_words = set(tokens(data.get("question", "")))
         best, best_score, best_sentences = None, 0, []
         for ex in data.get("excerpts", []):
             sentences = _sentences(ex["text"]) or [ex["text"]]
-            scored = sorted(((len(q_words & (_words(st) | set(re.findall(r"[a-z0-9]{3,}", st.lower())))), st)
-                             for st in sentences), reverse=True)
+            scored = sorted(((len(q_words & set(tokens(st))), st) for st in sentences), reverse=True)
             score = scored[0][0] if scored else 0
             if score > best_score:
-                best, best_score, best_sentences = ex, score, [st for sc, st in scored[:2] if sc > 0]
+                best, best_score = ex, score
+                best_sentences = [st for sc, st in scored[:2] if sc >= max(1, score - 1)]
         if not best or best_score < 2:
             return {"answerable": False, "answer": "", "source_ids": [], "escalate": False}
-        escalate = bool(re.search(r"\b(refund|broken|smoke|fire|replace (it|the unit)|warranty claim)\b", question.lower()))
+        escalate = bool(re.search(r"\b(refund|broken|smoke|fire|replace (it|the unit)|warranty claim)\b",
+                                  data.get("question", "").lower()))
         return {"answerable": True, "answer": " ".join(best_sentences), "source_ids": [best["id"]], "escalate": escalate}
 
     # ---------------- lifecycle ----------------
