@@ -246,7 +246,7 @@ class MockLLMProvider(LLMProvider):
         ("OUT_OF_OFFICE", r"out of (the )?office|on vacation|on leave|away until|auto.?reply|automatic reply|limited access to email"),
         ("REQUESTED_LATER", r"next (quarter|month|year)|in a few (weeks|months)|reach out (again )?(later|in)|circle back|not right now but|later this year|after (january|february|march|april|may|june|july|august|september|october|november|december)"),
         ("NOT_INTERESTED", r"not interested|no thanks|no thank you|not a fit|already (have|use|work with)|we'll pass|not for us|no need"),
-        ("INTERESTED", r"interested|sounds (good|great)|let'?s (talk|chat|connect)|book a|schedule|happy to (chat|talk)|set up a (call|meeting)|send (me )?(a )?(calendar|invite)|demo"),
+        ("INTERESTED", r"interested|sounds (good|great)|(could|can) we (do|have|set up|book) a (call|chat|meeting)|let'?s (talk|chat|connect)|book a|schedule|happy to (chat|talk)|set up a (call|meeting)|send (me )?(a )?(calendar|invite)|demo"),
     ]
 
     def _reply_analysis(self, data: dict) -> dict:

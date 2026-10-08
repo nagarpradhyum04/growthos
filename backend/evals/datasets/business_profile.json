@@ -1,0 +1,14 @@
+{
+  "company_name": "PipelinePro",
+  "company_description": "PipelinePro builds outbound sales pipelines for B2B companies.",
+  "products_services": "Done-for-you outbound prospecting and account executive onboarding for sales teams",
+  "target_customers": "B2B software and logistics companies with growing sales teams",
+  "value_proposition": "We help growing sales teams onboard new account executives and fill their pipeline faster",
+  "industries": ["Logistics", "Software", "E-commerce", "Healthcare"],
+  "target_company_sizes": ["20-500"],
+  "tone": "friendly, concise",
+  "website": "https://pipelinepro.example",
+  "key_differentiators": "Specialized in logistics and software companies",
+  "campaign_goals": "Book discovery calls",
+  "sender_name": "Sam from PipelinePro"
+}

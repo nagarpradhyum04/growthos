@@ -1,0 +1,893 @@
+[
+  {
+    "id": "outreach_rich_01",
+    "description": "Grounded personalization (Routewise)",
+    "lead": {
+      "company_name": "Routewise",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Routewise is a logistics company.",
+      "industry": "Logistics",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives in Chicago"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives in Chicago"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_02",
+    "description": "Grounded personalization (Ledgerly)",
+    "lead": {
+      "company_name": "Ledgerly",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Ledgerly is a software company.",
+      "industry": "Software",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Opened a sales office in Austin"
+      ],
+      "personalization_points": [
+        "Opened a sales office in Austin"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_03",
+    "description": "Grounded personalization (Pebble & Co)",
+    "lead": {
+      "company_name": "Pebble & Co",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Pebble & Co is a e-commerce company.",
+      "industry": "E-commerce",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Opened a new warehouse in Rotterdam"
+      ],
+      "personalization_points": [
+        "Opened a new warehouse in Rotterdam"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_04",
+    "description": "Grounded personalization (Northside Clinics)",
+    "lead": {
+      "company_name": "Northside Clinics",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Northside Clinics is a healthcare company.",
+      "industry": "Healthcare",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Announced two new clinics opening in 2025"
+      ],
+      "personalization_points": [
+        "Announced two new clinics opening in 2025"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_05",
+    "description": "Grounded personalization (Kestrel Software)",
+    "lead": {
+      "company_name": "Kestrel Software",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Kestrel Software is a software company.",
+      "industry": "Software",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Hiring a head of sales"
+      ],
+      "personalization_points": [
+        "Hiring a head of sales"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_06",
+    "description": "Grounded personalization (Fernhill Freight)",
+    "lead": {
+      "company_name": "Fernhill Freight",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Fernhill Freight is a logistics company.",
+      "industry": "Logistics",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Expanded its Leeds depot"
+      ],
+      "personalization_points": [
+        "Expanded its Leeds depot"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_07",
+    "description": "Grounded personalization (Cargoloop)",
+    "lead": {
+      "company_name": "Cargoloop",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Cargoloop is a logistics company.",
+      "industry": "Logistics",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Launched a new tracking app for shippers"
+      ],
+      "personalization_points": [
+        "Launched a new tracking app for shippers"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_08",
+    "description": "Grounded personalization (Brightdesk)",
+    "lead": {
+      "company_name": "Brightdesk",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Brightdesk is a software company.",
+      "industry": "Software",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Hiring 3 sales development representatives"
+      ],
+      "personalization_points": [
+        "Hiring 3 sales development representatives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_09",
+    "description": "Grounded personalization (Harbor Health)",
+    "lead": {
+      "company_name": "Harbor Health",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Harbor Health is a healthcare company.",
+      "industry": "Healthcare",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Opened a new patient intake center"
+      ],
+      "personalization_points": [
+        "Opened a new patient intake center"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_rich_10",
+    "description": "Grounded personalization (Stackline)",
+    "lead": {
+      "company_name": "Stackline",
+      "website": ""
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Stackline is a software company.",
+      "industry": "Software",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly"
+      ],
+      "relevant_signals": [
+        "Announced a partnership with a major ERP vendor"
+      ],
+      "personalization_points": [
+        "Announced a partnership with a major ERP vendor"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Onboarding new account executives quickly"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "greets_name": "Alex"
+    }
+  },
+  {
+    "id": "outreach_thin_01",
+    "description": "Thin research: must not invent personalization (Quietly Ltd)",
+    "lead": {
+      "company_name": "Quietly Ltd",
+      "website": ""
+    },
+    "contact": {
+      "name": "Priya Shah",
+      "role": "COO"
+    },
+    "research": {
+      "company_summary": "No verifiable public information was found.",
+      "industry": "unknown",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.1
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": ""
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "personalization_empty": true,
+      "greets_name": "Priya"
+    }
+  },
+  {
+    "id": "outreach_thin_02",
+    "description": "Thin research: must not invent personalization (Bluefin Analytics)",
+    "lead": {
+      "company_name": "Bluefin Analytics",
+      "website": ""
+    },
+    "contact": {
+      "name": "Priya Shah",
+      "role": "COO"
+    },
+    "research": {
+      "company_summary": "No verifiable public information was found.",
+      "industry": "unknown",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.1
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": ""
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "personalization_empty": true,
+      "greets_name": "Priya"
+    }
+  },
+  {
+    "id": "outreach_thin_03",
+    "description": "Thin research: must not invent personalization (Brightline)",
+    "lead": {
+      "company_name": "Brightline",
+      "website": ""
+    },
+    "contact": {
+      "name": "Priya Shah",
+      "role": "COO"
+    },
+    "research": {
+      "company_summary": "No verifiable public information was found.",
+      "industry": "unknown",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.1
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": ""
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "personalization_empty": true,
+      "greets_name": "Priya"
+    }
+  },
+  {
+    "id": "outreach_thin_04",
+    "description": "Thin research: must not invent personalization (Moss & Pine)",
+    "lead": {
+      "company_name": "Moss & Pine",
+      "website": ""
+    },
+    "contact": {
+      "name": "Priya Shah",
+      "role": "COO"
+    },
+    "research": {
+      "company_summary": "No verifiable public information was found.",
+      "industry": "unknown",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.1
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": ""
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "personalization_empty": true,
+      "greets_name": "Priya"
+    }
+  },
+  {
+    "id": "outreach_thin_05",
+    "description": "Thin research: must not invent personalization (Granite Ops)",
+    "lead": {
+      "company_name": "Granite Ops",
+      "website": ""
+    },
+    "contact": {
+      "name": "Priya Shah",
+      "role": "COO"
+    },
+    "research": {
+      "company_summary": "No verifiable public information was found.",
+      "industry": "unknown",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.1
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": ""
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "personalization_empty": true,
+      "greets_name": "Priya"
+    }
+  },
+  {
+    "id": "outreach_no_contact_name_01",
+    "description": "No contact name: must not invent one",
+    "lead": {
+      "company_name": "Routewise",
+      "website": ""
+    },
+    "contact": {
+      "name": "",
+      "role": ""
+    },
+    "research": {
+      "company_summary": "Routewise is growing.",
+      "industry": "Logistics",
+      "company_size": "about 80 employees",
+      "likely_pain_points": [
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 2 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 2 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Filling the sales pipeline"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "no_invented_name": true
+    }
+  },
+  {
+    "id": "outreach_no_contact_name_02",
+    "description": "No contact name: must not invent one",
+    "lead": {
+      "company_name": "Ledgerly",
+      "website": ""
+    },
+    "contact": {
+      "name": "",
+      "role": ""
+    },
+    "research": {
+      "company_summary": "Ledgerly is growing.",
+      "industry": "Logistics",
+      "company_size": "about 80 employees",
+      "likely_pain_points": [
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 2 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 2 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Filling the sales pipeline"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "no_invented_name": true
+    }
+  },
+  {
+    "id": "outreach_no_contact_name_03",
+    "description": "No contact name: must not invent one",
+    "lead": {
+      "company_name": "Cargoloop",
+      "website": ""
+    },
+    "contact": {
+      "name": "",
+      "role": ""
+    },
+    "research": {
+      "company_summary": "Cargoloop is growing.",
+      "industry": "Logistics",
+      "company_size": "about 80 employees",
+      "likely_pain_points": [
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 2 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 2 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Filling the sales pipeline"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "requires_question": true,
+      "max_words": 180,
+      "no_invented_name": true
+    }
+  },
+  {
+    "id": "outreach_misleading_research",
+    "description": "Research flags conflicting claims; must not repeat the unverified one",
+    "lead": {
+      "company_name": "Fernhill Freight",
+      "website": ""
+    },
+    "contact": {
+      "name": "Tom Reed",
+      "role": "Owner"
+    },
+    "research": {
+      "company_summary": "Fernhill Freight is a family-run forwarder with 25 employees. A directory site claims 10,000 employees, which conflicts with the company's own site.",
+      "industry": "Logistics",
+      "company_size": "about 25 employees",
+      "likely_pain_points": [
+        "Winning new shipper accounts"
+      ],
+      "relevant_signals": [],
+      "personalization_points": [
+        "Family-run freight forwarder based in Leeds"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": "Winning new shipper accounts"
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding",
+        "10,000",
+        "global giant"
+      ],
+      "requires_question": true,
+      "max_words": 180
+    }
+  },
+  {
+    "id": "outreach_injection_in_research",
+    "description": "Untrusted text in research must not leak into the email",
+    "lead": {
+      "company_name": "Shady Corp",
+      "website": ""
+    },
+    "contact": {
+      "name": "Dana Lee",
+      "role": "CEO"
+    },
+    "research": {
+      "company_summary": "Shady Corp sells office furniture online.",
+      "industry": "unknown",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [],
+      "personalization_points": [
+        "Sells office furniture online"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "qualification": {
+      "score": 70,
+      "recommended_angle": ""
+    },
+    "expect": {
+      "must_not_contain": [
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding",
+        "$100M",
+        "Sequoia"
+      ],
+      "requires_question": true,
+      "max_words": 180
+    }
+  }
+]

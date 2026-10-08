@@ -1,0 +1,632 @@
+[
+  {
+    "id": "followup_01",
+    "description": "Follow-up 1 of 2 for Routewise (no reply)",
+    "lead": {
+      "company_name": "Routewise"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Routewise is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 1,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Routewise",
+        "body": "Hi Alex,\n\nI noticed Routewise is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:"
+    }
+  },
+  {
+    "id": "followup_02",
+    "description": "Follow-up 1 of 2 for Ledgerly (no reply)",
+    "lead": {
+      "company_name": "Ledgerly"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Ledgerly is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 1,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Ledgerly",
+        "body": "Hi Alex,\n\nI noticed Ledgerly is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:"
+    }
+  },
+  {
+    "id": "followup_03",
+    "description": "Follow-up 1 of 2 for Cargoloop (no reply)",
+    "lead": {
+      "company_name": "Cargoloop"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Cargoloop is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 1,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Cargoloop",
+        "body": "Hi Alex,\n\nI noticed Cargoloop is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:"
+    }
+  },
+  {
+    "id": "followup_04",
+    "description": "Follow-up 1 of 2 for Kestrel Software (no reply)",
+    "lead": {
+      "company_name": "Kestrel Software"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Kestrel Software is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 1,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Kestrel Software",
+        "body": "Hi Alex,\n\nI noticed Kestrel Software is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:"
+    }
+  },
+  {
+    "id": "followup_05",
+    "description": "Follow-up 1 of 2 for Stackline (no reply)",
+    "lead": {
+      "company_name": "Stackline"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Stackline is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 1,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Stackline",
+        "body": "Hi Alex,\n\nI noticed Stackline is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:"
+    }
+  },
+  {
+    "id": "followup_06",
+    "description": "Follow-up 2 of 2 for Routewise (no reply)",
+    "lead": {
+      "company_name": "Routewise"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Routewise is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 2,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Routewise",
+        "body": "Hi Alex,\n\nI noticed Routewise is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      },
+      {
+        "subject": "Re: Idea for Routewise",
+        "body": "Hi Alex,\n\nOne more thought on onboarding new AEs.\n\nWould a short call help?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:",
+      "final_close_any": [
+        "not the right time",
+        "no problem",
+        "won't follow up",
+        "not a priority",
+        "let me know",
+        "last note",
+        "close the loop",
+        "reach out again"
+      ]
+    }
+  },
+  {
+    "id": "followup_07",
+    "description": "Follow-up 2 of 2 for Ledgerly (no reply)",
+    "lead": {
+      "company_name": "Ledgerly"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Ledgerly is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 2,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Ledgerly",
+        "body": "Hi Alex,\n\nI noticed Ledgerly is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      },
+      {
+        "subject": "Re: Idea for Ledgerly",
+        "body": "Hi Alex,\n\nOne more thought on onboarding new AEs.\n\nWould a short call help?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:",
+      "final_close_any": [
+        "not the right time",
+        "no problem",
+        "won't follow up",
+        "not a priority",
+        "let me know",
+        "last note",
+        "close the loop",
+        "reach out again"
+      ]
+    }
+  },
+  {
+    "id": "followup_08",
+    "description": "Follow-up 2 of 2 for Pebble & Co (no reply)",
+    "lead": {
+      "company_name": "Pebble & Co"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Pebble & Co is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 2,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Pebble & Co",
+        "body": "Hi Alex,\n\nI noticed Pebble & Co is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      },
+      {
+        "subject": "Re: Idea for Pebble & Co",
+        "body": "Hi Alex,\n\nOne more thought on onboarding new AEs.\n\nWould a short call help?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:",
+      "final_close_any": [
+        "not the right time",
+        "no problem",
+        "won't follow up",
+        "not a priority",
+        "let me know",
+        "last note",
+        "close the loop",
+        "reach out again"
+      ]
+    }
+  },
+  {
+    "id": "followup_09",
+    "description": "Follow-up 2 of 2 for Harbor Health (no reply)",
+    "lead": {
+      "company_name": "Harbor Health"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Harbor Health is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 2,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Harbor Health",
+        "body": "Hi Alex,\n\nI noticed Harbor Health is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      },
+      {
+        "subject": "Re: Idea for Harbor Health",
+        "body": "Hi Alex,\n\nOne more thought on onboarding new AEs.\n\nWould a short call help?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:",
+      "final_close_any": [
+        "not the right time",
+        "no problem",
+        "won't follow up",
+        "not a priority",
+        "let me know",
+        "last note",
+        "close the loop",
+        "reach out again"
+      ]
+    }
+  },
+  {
+    "id": "followup_10",
+    "description": "Follow-up 2 of 2 for Brightdesk (no reply)",
+    "lead": {
+      "company_name": "Brightdesk"
+    },
+    "contact": {
+      "name": "Alex Morgan",
+      "role": "VP Sales"
+    },
+    "research": {
+      "company_summary": "Brightdesk is growing its sales team.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "followup_number": 2,
+    "max_followups": 2,
+    "previous_emails": [
+      {
+        "subject": "Idea for Brightdesk",
+        "body": "Hi Alex,\n\nI noticed Brightdesk is hiring 4 account executives. We help new AEs ramp faster.\n\nOpen to a quick call?\n\nSam"
+      },
+      {
+        "subject": "Re: Idea for Brightdesk",
+        "body": "Hi Alex,\n\nOne more thought on onboarding new AEs.\n\nWould a short call help?\n\nSam"
+      }
+    ],
+    "expect": {
+      "must_not_contain": [
+        "haven't heard back",
+        "have not heard back",
+        "just bumping",
+        "bumping this",
+        "you must be busy",
+        "didn't hear back",
+        "per my last email",
+        "Series B",
+        "award-winning",
+        "case study",
+        "we helped",
+        "as you know",
+        "I'm a huge fan",
+        "congratulations on your funding"
+      ],
+      "max_words": 130,
+      "subject_prefix": "Re:",
+      "final_close_any": [
+        "not the right time",
+        "no problem",
+        "won't follow up",
+        "not a priority",
+        "let me know",
+        "last note",
+        "close the loop",
+        "reach out again"
+      ]
+    }
+  }
+]

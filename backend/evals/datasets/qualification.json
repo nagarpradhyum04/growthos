@@ -1,0 +1,260 @@
+[
+  {
+    "id": "qual_strong_fit",
+    "description": "Logistics software, right size, hiring sales",
+    "lead": {
+      "company_name": "Routewise"
+    },
+    "research": {
+      "company_summary": "Logistics software for carriers.",
+      "industry": "Logistics",
+      "company_size": "about 85 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives quickly",
+        "Filling the sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring 4 account executives",
+        "Launched a new product in May"
+      ],
+      "personalization_points": [
+        "Hiring 4 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "qualified": true,
+      "min_score": 60
+    }
+  },
+  {
+    "id": "qual_wrong_industry",
+    "description": "Restaurant, outside target industries",
+    "lead": {
+      "company_name": "Luigi's Trattoria"
+    },
+    "research": {
+      "company_summary": "An Italian restaurant.",
+      "industry": "Hospitality",
+      "company_size": "about 12 employees",
+      "likely_pain_points": [
+        "Filling tables on weekdays"
+      ],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "qualified": false,
+      "max_score": 50
+    }
+  },
+  {
+    "id": "qual_all_unknown",
+    "description": "Insufficient information",
+    "lead": {
+      "company_name": "Quietly Ltd"
+    },
+    "research": {
+      "company_summary": "No verifiable public information was found.",
+      "industry": "unknown",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.1
+    },
+    "expect": {
+      "qualified": false,
+      "max_score": 30,
+      "ratings": {
+        "industry_fit": "unknown",
+        "company_size_fit": "unknown"
+      }
+    }
+  },
+  {
+    "id": "qual_too_large",
+    "description": "Target industry but far too large",
+    "lead": {
+      "company_name": "MegaShip"
+    },
+    "research": {
+      "company_summary": "A global shipping conglomerate.",
+      "industry": "Logistics",
+      "company_size": "about 50000 employees",
+      "likely_pain_points": [
+        "Global compliance"
+      ],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "qualified": false
+    }
+  },
+  {
+    "id": "qual_competitor",
+    "description": "Lead is a direct competitor",
+    "lead": {
+      "company_name": "OutboundCo"
+    },
+    "research": {
+      "company_summary": "OutboundCo is an agency offering done-for-you outbound prospecting for B2B companies.",
+      "industry": "Marketing services",
+      "company_size": "about 60 employees",
+      "likely_pain_points": [
+        "Winning new clients"
+      ],
+      "relevant_signals": [
+        "Hiring SDRs"
+      ],
+      "personalization_points": [
+        "Hiring SDRs"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "qualified": false
+    }
+  },
+  {
+    "id": "qual_closed_company",
+    "description": "Company ceased operations",
+    "lead": {
+      "company_name": "Oldway Logistics"
+    },
+    "research": {
+      "company_summary": "Oldway Logistics ceased operations in 2023.",
+      "industry": "Logistics",
+      "company_size": "unknown",
+      "likely_pain_points": [],
+      "relevant_signals": [
+        "The company appears to have ceased operations."
+      ],
+      "personalization_points": [
+        "The company appears to have ceased operations."
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "qualified": false
+    }
+  },
+  {
+    "id": "qual_borderline",
+    "description": "Right industry, unknown size, one signal",
+    "lead": {
+      "company_name": "Kestrel Software"
+    },
+    "research": {
+      "company_summary": "Scheduling software for schools.",
+      "industry": "Software",
+      "company_size": "unknown",
+      "likely_pain_points": [
+        "Building a predictable sales pipeline"
+      ],
+      "relevant_signals": [
+        "Hiring one sales rep"
+      ],
+      "personalization_points": [
+        "Hiring one sales rep"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "min_score": 30,
+      "max_score": 85,
+      "ratings": {
+        "company_size_fit": "unknown"
+      }
+    }
+  },
+  {
+    "id": "qual_unknown_industry_strong_signals",
+    "description": "Signals but industry could not be verified",
+    "lead": {
+      "company_name": "Vexa"
+    },
+    "research": {
+      "company_summary": "Vexa is growing quickly.",
+      "industry": "unknown",
+      "company_size": "about 100 employees",
+      "likely_pain_points": [],
+      "relevant_signals": [
+        "Hiring 6 account executives",
+        "Opened a new office"
+      ],
+      "personalization_points": [
+        "Hiring 6 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "ratings": {
+        "industry_fit": "unknown"
+      },
+      "max_score": 75
+    }
+  },
+  {
+    "id": "qual_software_strong",
+    "description": "B2B software with growing sales team",
+    "lead": {
+      "company_name": "Ledgerly"
+    },
+    "research": {
+      "company_summary": "B2B accounting software.",
+      "industry": "Software",
+      "company_size": "about 200 employees",
+      "likely_pain_points": [
+        "Onboarding new account executives",
+        "Filling pipeline for a growing sales team"
+      ],
+      "relevant_signals": [
+        "Hiring 10 account executives",
+        "Opened a sales office in Austin"
+      ],
+      "personalization_points": [
+        "Hiring 10 account executives"
+      ],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "qualified": true,
+      "min_score": 60
+    }
+  },
+  {
+    "id": "qual_tiny_startup",
+    "description": "3-person startup, no sales team",
+    "lead": {
+      "company_name": "Tinyroute"
+    },
+    "research": {
+      "company_summary": "A pre-seed logistics startup.",
+      "industry": "Logistics",
+      "company_size": "about 3 employees",
+      "likely_pain_points": [
+        "Finding product-market fit"
+      ],
+      "relevant_signals": [],
+      "personalization_points": [],
+      "sources": [],
+      "confidence": 0.6
+    },
+    "expect": {
+      "qualified": false
+    }
+  }
+]

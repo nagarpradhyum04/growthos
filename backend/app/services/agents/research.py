@@ -1,4 +1,5 @@
 """Research Agent: turns public evidence about a company into a factual research brief."""
+import re
 from dataclasses import dataclass
 
 from pydantic import BaseModel
@@ -11,6 +12,19 @@ from app.services.search import EvidenceBundle, ResearchTools
 
 NOTES_SOURCE = "user-notes"  # pseudo-URL for facts that came from the user's own lead notes
 NO_EVIDENCE_MAX_CONFIDENCE = 0.3
+
+# Fetched web text is untrusted. Sentences that try to instruct the model are dropped before the
+# LLM sees them (defence in depth; the prompt also tells the model to ignore embedded instructions).
+_INJECTION_RE = re.compile(
+    r"(ignore|disregard|forget) (all |any )?(the )?(previous|prior|above|earlier) (instructions|prompts?)"
+    r"|you are (now )?(an?|the) (ai|assistant|language model)|system prompt|^\s*system:",
+    re.I,
+)
+
+
+def neutralize_injections(text: str) -> str:
+    sentences = re.split(r"(?<=[.!?])\s+", text)
+    return " ".join(s for s in sentences if not _INJECTION_RE.search(s))
 
 
 class ResearchInput(BaseModel):
@@ -38,7 +52,7 @@ class ResearchAgent(BaseAgent):
 
     def run(self, data: ResearchInput, ctx: RunContext | None = None) -> ResearchAgentResult:
         evidence = self.tools.gather(data.company_name, data.website)
-        documents = [d.to_dict() for d in evidence.documents]
+        documents = [{**d.to_dict(), "text": neutralize_injections(d.text)} for d in evidence.documents]
         if data.notes.strip():
             documents.append({"url": NOTES_SOURCE, "title": "Notes provided by the user",
                               "text": data.notes.strip(), "source_type": "user"})
