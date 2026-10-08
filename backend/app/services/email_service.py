@@ -45,6 +45,22 @@ def approve_email(email: Email, user_id: uuid.UUID | None) -> Email:
     return email
 
 
+def reject_email(db: Session, email: Email) -> None:
+    """Discard an unsent draft so a new one can be generated. Never touches sent emails."""
+    if email.status not in EDITABLE_STATUSES:
+        raise InvalidStateError(f"An email in status {email.status} cannot be rejected.")
+    lead = db.get(Lead, email.lead_id)
+    if email.sequence_number == 0 and lead.status == LeadStatus.DRAFTED:
+        lead.status = LeadStatus.QUALIFIED
+    lead.last_activity_at = datetime.now(timezone.utc)
+    db.execute(
+        Followup.__table__.update().where(Followup.email_id == email.id)
+        .values(status=FollowupStatus.CANCELLED, cancel_reason="draft_rejected_by_reviewer")
+    )
+    db.delete(email)
+    db.flush()
+
+
 def unsubscribe_footer(contact: Contact) -> str:
     token = create_unsubscribe_token(contact.id, contact.organization_id)
     url = f"{get_settings().public_base_url.rstrip('/')}/public/unsubscribe?token={token}"

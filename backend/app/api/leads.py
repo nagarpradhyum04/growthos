@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import CurrentUser, container, current_user
 from app.db import get_db
-from app.models import Campaign, Contact, Email, EmailReply, Followup, Lead
+from app.models import AgentRun, Campaign, Contact, Email, EmailReply, Followup, Lead
 from app.models.enums import LeadStatus
 from app.schemas import (
     CampaignOut,
@@ -137,27 +137,7 @@ def _detail(db: Session, lead: Lead) -> LeadDetail:
     replies = db.scalars(select(EmailReply).where(EmailReply.lead_id == lead.id).order_by(EmailReply.received_at)).all()
     followups = db.scalars(select(Followup).where(Followup.lead_id == lead.id).order_by(Followup.sequence_number)).all()
 
-    timeline = [TimelineEvent(at=lead.created_at, type="lead_created", description="Lead created")]
-    if research:
-        timeline.append(TimelineEvent(at=research.created_at, type="researched",
-                                      description=f"Researched (confidence {research.confidence:.2f})"))
-    for e in emails:
-        label = "Initial email" if e.sequence_number == 0 else f"Follow-up {e.sequence_number}"
-        timeline.append(TimelineEvent(at=e.created_at, type="email_drafted", description=f"{label} drafted"))
-        if e.sent_at:
-            timeline.append(TimelineEvent(at=e.sent_at, type="email_sent", description=f"{label} sent"))
-    for r in replies:
-        timeline.append(TimelineEvent(at=r.received_at, type="reply",
-                                      description=f"Reply received ({r.classification or 'not analyzed yet'})"))
-    for f in followups:
-        if f.status.value in ("CANCELLED", "LIMIT_REACHED", "FAILED"):
-            timeline.append(TimelineEvent(at=f.updated_at, type="followup_" + f.status.value.lower(),
-                                          description=f"Follow-up {f.sequence_number} {f.status.value.lower()}"
-                                          + (f" ({f.cancel_reason})" if f.cancel_reason else "")))
-    for c in contacts:
-        if c.forgotten_at:
-            timeline.append(TimelineEvent(at=c.forgotten_at, type="forgotten", description="Contact forgotten (Forget Me)"))
-    timeline.sort(key=lambda t: t.at)
+    timeline = _timeline(db, lead, contacts, research, emails, replies, followups)
 
     return LeadDetail(
         id=lead.id, campaign=CampaignOut.model_validate(campaign), company_name=lead.company_name,
@@ -172,3 +152,79 @@ def _detail(db: Session, lead: Lead) -> LeadDetail:
         followups=[FollowupOut.model_validate(f) for f in followups],
         timeline=timeline,
     )
+
+
+AGENT_LABELS = {
+    "research": "Research Agent", "qualification": "Qualification Agent", "outreach": "Outreach Agent",
+    "followup": "Follow-up Agent", "reply_analysis": "Reply Analysis Agent", "analytics": "Analytics Agent",
+}
+
+
+def _timeline(db: Session, lead: Lead, contacts, research, emails, replies, followups) -> list[TimelineEvent]:
+    """Activity history assembled from what is already stored (rows + agent_runs); nothing is invented."""
+    ev = [TimelineEvent(at=lead.created_at, type="lead_created", description="Lead created", actor="human")]
+    runs = db.scalars(select(AgentRun).where(AgentRun.lead_id == lead.id).order_by(AgentRun.started_at)).all()
+    last_qualification = next((r for r in reversed(runs) if r.agent_name == "qualification"
+                               and r.status.value == "SUCCEEDED"), None)
+    for run in runs:
+        at = run.completed_at or run.started_at
+        name = AGENT_LABELS.get(run.agent_name, run.agent_name)
+        if run.status.value == "FAILED":
+            ev.append(TimelineEvent(at=at, type="agent_failed", actor="agent",
+                                    description=f"{name} failed — nothing was saved ({(run.error or '')[:120]})"))
+        elif run.status.value == "SUCCEEDED" and run.agent_name in ("research", "qualification"):
+            text = f"{name} completed"
+            if run.agent_name == "research" and research is not None and run.id == research.agent_run_id:
+                text += f" (confidence {research.confidence:.2f})"
+            if run is last_qualification and lead.qualification_score is not None:
+                text += f": {lead.qualification_score}/100 — {'qualified' if lead.qualified else 'not qualified'}"
+            ev.append(TimelineEvent(at=at, type=f"{run.agent_name}_completed", description=text, actor="agent"))
+    if research is not None and research.agent_run_id is None:
+        ev.append(TimelineEvent(at=research.created_at, type="research_completed", actor="agent",
+                                description=f"Research completed (confidence {research.confidence:.2f})"))
+    if lead.qualified is False and not any(e.sequence_number == 0 for e in emails):
+        ev.append(TimelineEvent(at=lead.last_activity_at, type="outreach_blocked", actor="system",
+                                description="No outreach: lead did not qualify"))
+    for e in emails:
+        label = "Initial email" if e.sequence_number == 0 else f"Follow-up {e.sequence_number}"
+        writer = "Outreach Agent" if e.sequence_number == 0 else "Follow-up Agent"
+        ev.append(TimelineEvent(at=e.created_at, type="email_drafted", actor="agent",
+                                description=f"{label} draft generated by {writer}"))
+        if e.approved_at:
+            who = "human reviewer" if e.approved_by_user_id else "automated-sending setting"
+            ev.append(TimelineEvent(at=e.approved_at, type="email_approved", actor="human" if e.approved_by_user_id else "system",
+                                    description=f"{label} approved by {who}"))
+        if e.sent_at:
+            ev.append(TimelineEvent(at=e.sent_at, type="email_sent", actor="system",
+                                    description=f"{label} passed the safety gate and was sent"))
+        if e.status.value == "SUPPRESSED":
+            ev.append(TimelineEvent(at=e.updated_at, type="email_blocked", actor="system",
+                                    description=f"{label} blocked: contact suppressed"))
+    for r in replies:
+        ev.append(TimelineEvent(at=r.received_at, type="reply", actor="contact", description="Reply received"))
+        if r.opt_out_detected:
+            ev.append(TimelineEvent(at=r.received_at, type="opt_out_detected", actor="system",
+                                    description="Opt-out language detected by deterministic rule — contact suppressed"))
+        if r.analyzed_at and r.classification:
+            by = "Reply Analysis Agent" if r.agent_run_id else "backend rules"
+            ev.append(TimelineEvent(at=r.analyzed_at, type="reply_classified", actor="agent" if r.agent_run_id else "system",
+                                    description=f"Reply classified as {r.classification.value.replace('_', ' ')} by {by}"))
+    for f in followups:
+        if f.status.value == "CANCELLED":
+            ev.append(TimelineEvent(at=f.updated_at, type="followup_stopped", actor="system",
+                                    description=f"Follow-up {f.sequence_number} stopped ({(f.cancel_reason or '').replace('_', ' ')})"))
+        elif f.status.value == "LIMIT_REACHED":
+            ev.append(TimelineEvent(at=f.updated_at, type="sequence_completed", actor="system",
+                                    description="Follow-up limit reached — sequence completed, no more emails"))
+        elif f.status.value == "FAILED":
+            ev.append(TimelineEvent(at=f.updated_at, type="followup_failed", actor="system",
+                                    description=f"Follow-up {f.sequence_number} generation failed"))
+    for c in contacts:
+        if c.forgotten_at:
+            ev.append(TimelineEvent(at=c.forgotten_at, type="forgotten", actor="human",
+                                    description="Forget Me: personal data erased, suppression kept"))
+        elif c.suppressed:
+            ev.append(TimelineEvent(at=c.updated_at, type="suppressed", actor="system",
+                                    description=f"Contact suppressed ({(c.suppression_reason or '').replace('_', ' ')})"))
+    ev.sort(key=lambda t: t.at)
+    return ev

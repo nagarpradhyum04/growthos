@@ -186,6 +186,16 @@ class ReplyOut(ORM):
     analyzed_at: datetime | None
 
 
+class ReplyWithContext(ReplyOut):
+    """A reply plus the backend state it caused, so the UI can explain what happened."""
+
+    company_name: str
+    followups_cancelled: int
+    followups_pending: int
+    contact_suppressed: bool
+    contact_forgotten: bool
+
+
 class FollowupOut(ORM):
     id: uuid.UUID
     sequence_number: int
@@ -199,6 +209,8 @@ class TimelineEvent(BaseModel):
     at: datetime
     type: str
     description: str
+    # Who acted: "agent" | "human" | "system" (deterministic backend rule) | "contact"
+    actor: str = "system"
 
 
 class LeadDetail(ORM):
@@ -301,3 +313,5 @@ class AgentRunOut(ORM):
     started_at: datetime
     completed_at: datetime | None
     latency_ms: int | None
+    # Redacted structured output (None when payload logging is off, the run failed, or it was erased).
+    output: dict[str, Any] | None = None

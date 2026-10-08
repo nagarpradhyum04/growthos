@@ -14,7 +14,7 @@ from app.schemas import EmailOut, EmailReviewOut, EmailUpdate, SendRequest
 from app.services import email_service, jobs
 from app.services.common import get_owned, latest_research
 from app.services.container import Container
-from app.services.safety import can_send
+from app.services.safety import can_send, describe_checks
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
@@ -47,7 +47,7 @@ def _review(db: Session, email: Email) -> EmailReviewOut:
         personalization_used=draft.personalization_used if draft else [],
         draft_confidence=draft.confidence if draft else None,
         research=research.data if research else None,
-        send_check={"allowed": decision.allowed, "reasons": decision.reasons},
+        send_check={"allowed": decision.allowed, "reasons": decision.reasons, "checks": describe_checks(decision)},
     )
 
 
@@ -90,3 +90,13 @@ def send(email_id: uuid.UUID, body: SendRequest | None = Body(default=None),
         return _review(db, email)
     email = email_service.send_email(db, email_id, cu.org_id, c)
     return _review(db, email)
+
+
+@router.post("/{email_id}/reject", response_model=EmailOut)
+def reject(email_id: uuid.UUID, cu: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
+    """Reviewer rejects an unsent AI draft. The agent's original output stays in email_drafts for audit."""
+    email = get_owned(db, Email, email_id, cu.org_id, for_update=True)
+    snapshot = EmailOut.model_validate(email)
+    email_service.reject_email(db, email)
+    db.commit()
+    return snapshot

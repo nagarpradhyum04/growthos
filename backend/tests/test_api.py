@@ -79,7 +79,9 @@ def test_lead_endpoints(client, auth, campaign, lead):
     assert email["status"] == "DRAFT" and "Jane" in email["body"]
     detail = client.get(f"/leads/{lead['id']}", headers=auth).json()
     assert detail["status"] == "DRAFTED" and len(detail["emails"]) == 1
-    assert [t["type"] for t in detail["timeline"]][:3] == ["lead_created", "researched", "email_drafted"]
+    assert [t["type"] for t in detail["timeline"]][:4] == [
+        "lead_created", "research_completed", "qualification_completed", "email_drafted"]
+    assert "70/100" in detail["timeline"][2]["description"] and detail["timeline"][2]["actor"] == "agent"
     listed = client.get("/leads", headers=auth, params={"campaign_id": campaign["id"]}).json()
     assert listed[0]["qualification_score"] == 70 and listed[0]["campaign_name"] == "Q4 Logistics"
 
@@ -91,7 +93,11 @@ def test_email_review_shows_research_and_send_check(client, auth, lead):
     review = client.get(f"/emails/{email['id']}", headers=auth).json()
     assert review["research"]["industry"] == "Logistics"
     assert review["personalization_used"]
-    assert review["send_check"] == {"allowed": False, "reasons": ["not_approved"]}
+    assert review["send_check"]["allowed"] is False and review["send_check"]["reasons"] == ["not_approved"]
+    checks = {c["key"]: c for c in review["send_check"]["checks"]}
+    assert checks["human_approved"]["passed"] is False and checks["human_approved"]["reasons"] == ["not_approved"]
+    assert checks["send_gate"]["passed"] is False
+    assert all(c["passed"] for k, c in checks.items() if k not in ("human_approved", "send_gate"))
 
 
 def test_regenerating_draft_resets_approval(client, auth, lead):
@@ -173,3 +179,63 @@ def test_analytics_endpoint(client, auth, lead):
     assert data["campaigns"][0]["emails_sent"] == 1
     insights = client.post("/analytics/insights", headers=auth).json()
     assert "1 emails were sent" in insights["insights"]["summary"]
+
+
+def test_safety_checks_reflect_backend_decision(client, auth, campaign, lead):
+    client.post(f"/leads/{lead['id']}/research", headers=auth)
+    client.post(f"/leads/{lead['id']}/qualify", headers=auth)
+    email = client.post(f"/leads/{lead['id']}/generate-email", headers=auth).json()
+    client.post(f"/emails/{email['id']}/approve", headers=auth)
+    assert all(c["passed"] for c in client.get(f"/emails/{email['id']}", headers=auth).json()["send_check"]["checks"])
+    client.post(f"/campaigns/{campaign['id']}/pause", headers=auth)
+    checks = {c["key"]: c for c in client.get(f"/emails/{email['id']}", headers=auth).json()["send_check"]["checks"]}
+    assert checks["campaign_active"] == {"key": "campaign_active", "label": "Campaign is active", "passed": False,
+                                         "reasons": ["campaign_paused"]}
+    assert checks["send_gate"]["passed"] is False
+
+
+def test_reject_draft_allows_regeneration(client, auth, lead, db):
+    from app.models import EmailDraft
+
+    client.post(f"/leads/{lead['id']}/research", headers=auth)
+    client.post(f"/leads/{lead['id']}/qualify", headers=auth)
+    email = client.post(f"/leads/{lead['id']}/generate-email", headers=auth).json()
+    assert client.post(f"/emails/{email['id']}/reject", headers=auth).status_code == 200
+    assert client.get(f"/emails/{email['id']}", headers=auth).status_code == 404
+    detail = client.get(f"/leads/{lead['id']}", headers=auth).json()
+    assert detail["status"] == "QUALIFIED" and detail["emails"] == []
+    assert db.query(EmailDraft).count() == 1  # the agent's original output is kept for audit
+    again = client.post(f"/leads/{lead['id']}/generate-email", headers=auth)
+    assert again.status_code == 200 and again.json()["id"] != email["id"]
+
+
+def test_sent_email_cannot_be_rejected(client, auth, lead):
+    sent = lead_to_sent(client, auth, lead["id"])
+    assert client.post(f"/emails/{sent['id']}/reject", headers=auth).status_code == 409
+
+
+def test_replies_include_resulting_backend_state(client, auth, lead):
+    sent = lead_to_sent(client, auth, lead["id"])
+    client.post("/replies?analyze_now=true", headers=auth, json={"email_id": sent["id"], "body": "Sounds great, let's talk."})
+    reply = client.get("/replies", headers=auth).json()[0]
+    assert reply["classification"] == "INTERESTED" and reply["company_name"] == "Acme Logistics"
+    assert reply["followups_cancelled"] == 1 and reply["followups_pending"] == 0
+    assert reply["contact_suppressed"] is False
+    types = [t["type"] for t in client.get(f"/leads/{lead['id']}", headers=auth).json()["timeline"]]
+    for expected in ("email_approved", "email_sent", "reply", "reply_classified", "followup_stopped"):
+        assert expected in types
+
+
+def test_disqualified_lead_timeline_shows_no_outreach(client, auth, campaign, research_tools):
+    research_tools._documents = []
+    lead = create_lead(client, auth, campaign, email="x@nothing.example", company_name="Nothing Co", website="")
+    client.post(f"/leads/{lead['id']}/research", headers=auth)
+    client.post(f"/leads/{lead['id']}/qualify", headers=auth)
+    timeline = client.get(f"/leads/{lead['id']}", headers=auth).json()["timeline"]
+    assert timeline[-1]["type"] == "outreach_blocked"
+
+
+def test_agent_runs_expose_output(client, auth, lead):
+    client.post(f"/leads/{lead['id']}/research", headers=auth)
+    run = client.get("/agent-runs", headers=auth, params={"lead_id": lead["id"]}).json()[0]
+    assert run["output"]["industry"] == "Logistics"

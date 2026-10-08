@@ -119,3 +119,33 @@ def can_send(db: Session, email: Email) -> SendDecision:
         reasons.append("duplicate_email")
 
     return SendDecision(allowed=not reasons, reasons=reasons)
+
+
+# Human-readable view of can_send(): one row per rule, derived from the decision's reason codes.
+# The UI renders this list as-is; it never re-implements the rules.
+SAFETY_CHECKS: list[tuple[str, str, tuple[str, ...]]] = [
+    ("not_opted_out", "Contact has not opted out", ("contact_unsubscribed",)),
+    ("not_suppressed", "Contact is not suppressed (incl. Forget Me)", ("contact_suppressed", "suppression_record_exists")),
+    ("has_address", "Recipient address on file", ("missing_recipient_address",)),
+    ("no_reply", "No previous reply from this contact", ("recipient_replied",)),
+    ("campaign_active", "Campaign is active", ("campaign_paused", "campaign_not_active")),
+    ("lead_enabled", "Lead is enabled", ("lead_disabled",)),
+    ("followup_limit", "Follow-up limit not exceeded", ("followup_limit_reached",)),
+    ("sequence_order", "Previous sequence step was sent", ("previous_step_not_sent",)),
+    ("no_duplicate", "Not a duplicate / not already sent", ("already_sent", "duplicate_email")),
+    ("human_approved", "Approved by a human", ("not_approved",)),
+]
+
+
+def describe_checks(decision: SendDecision) -> list[dict]:
+    failed = set(decision.reasons)
+    checks = [
+        {"key": key, "label": label, "passed": not (failed & set(codes)), "reasons": sorted(failed & set(codes))}
+        for key, label, codes in SAFETY_CHECKS
+    ]
+    known = {c for _, _, codes in SAFETY_CHECKS for c in codes}
+    for unknown in sorted(failed - known):  # never hide a failing rule, even one without a label yet
+        checks.append({"key": unknown, "label": unknown.replace("_", " "), "passed": False, "reasons": [unknown]})
+    checks.append({"key": "send_gate", "label": "Send safety gate (can_send) passed", "passed": decision.allowed,
+                   "reasons": []})
+    return checks
