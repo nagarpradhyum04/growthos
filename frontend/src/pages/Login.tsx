@@ -16,9 +16,9 @@ export default function Login() {
     setError(null);
     try {
       const body = mode === "login" ? { email: form.email, password: form.password } : form;
-      const { access_token } = await api.post<{ access_token: string }>(`/auth/${mode}`, body);
-      auth.set(access_token);
-      navigate(mode === "register" ? "/settings" : "/");
+      const { access_token, role } = await api.post<{ access_token: string; role?: string }>(`/auth/${mode}`, body);
+      auth.set(access_token, role ?? "owner");
+      navigate(role === "customer" ? "/portal" : mode === "register" ? "/settings" : "/");
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -34,7 +34,7 @@ export default function Login() {
         <div className="brand large">
           Growth<span>OS</span>
         </div>
-        <p className="muted">Your small AI growth team: research, qualify, write, follow up — and respect opt-outs.</p>
+        <p className="muted">An AI operating system for business growth and customer relationships. Business owners and customers sign in here.</p>
         <ErrorBanner error={error} />
         {mode === "register" && (
           <>

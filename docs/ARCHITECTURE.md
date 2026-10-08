@@ -116,6 +116,76 @@ retryable failures with exponential backoff, and requeues jobs that a crashed wo
 
 The worker also processes due follow-ups on every tick.
 
+## OS layer (Orchestrator, memory, policy, escalation)
+
+```text
+Business goal ─► Orchestrator ─► Research ─► Qualification ─► (read memory) ─► Outreach ─► Safety Agent
+                     │                                                               │
+                     │                              BLOCK ◄────────────┬──────────── ESCALATE / ALLOW
+                     │                                                 ▼
+                     │                                   Approvals inbox (human) ─► Send (can_send)
+                     ▼                                                                │
+               workflow state + trace ◄── Email Intelligence ◄── reply ◄──────────────┘
+                     │                          │ GREEN auto / YELLOW-RED escalate
+                     ▼                          ▼
+               Shared memory ◄── Analytics Agent insights ◄── deterministic metrics
+```
+
+**Orchestrator** (`services/orchestrator.py`):
+- `run_goal` turns a goal into a plan and starts one LEAD workflow per prospect. Routing is
+  deterministic.
+- Each workflow moves through `WorkflowState` (PENDING → RESEARCHING → … → AWAITING_APPROVAL → SENT →
+  WAITING_FOR_REPLY → REPLY_RECEIVED → ESCALATED / COMPLETED / BLOCKED / FAILED).
+- Every step writes a `workflow_events` row (agent, action, status, result, duration).
+- Transient LLM failures are retried once; invalid output fails the workflow.
+- Sends, replies, follow-ups and suppression report into the lead's workflow through
+  `workflow_service.advance_lead`, so one trace covers the whole journey.
+
+**Shared memory** (`memory_entries`, `services/memory_service.py`):
+- Writers: Research stores verified facts, Qualification stores the score, Email Intelligence stores
+  intents, and the Analytics Agent stores insights.
+- Readers: Outreach reads lead facts and learned insights; support and lifecycle read customer context.
+- Plain SQL, no vector store. Forget Me deletes a person's memory.
+
+**Safety Agent / policy layer** (`services/policy.py`, `business_policies`):
+- **BLOCK** rules live inside `can_send()`: frequency limits, minimum gap, blocked domains, banned
+  phrases and missing content.
+- **ESCALATE** rules force a human even in automated mode: unsupported claims (percentages,
+  guarantees, superlatives not in the business profile) and sensitive commercial terms.
+
+**Email Intelligence** (`services/escalation.py`):
+- Regex detectors run over the raw text, plus the intents the LLM reports. The tier is GREEN
+  (routine), YELLOW (opportunity) or RED (human attention).
+- RED categories (complaint, refund, warranty dispute, legal, contract, sensitive, low confidence)
+  always escalate and can never be set to "automate". YELLOW categories follow the owner's rules.
+- The LLM can add intents but cannot lower a tier.
+
+**Approvals** (`approvals`):
+- Types: outbound email, prospect reply, customer message, warranty claim and service request.
+- Owner actions: approve, reject, take over, and mark as automated (non-RED only).
+- Each action runs the normal code path, so `can_send()` still decides.
+
+## Customer lifecycle
+
+Customer data lives in these tables:
+- `customers`, `products` and `purchases` (`warranty_expires_at` is computed from the product's
+  warranty months)
+- `knowledge_documents` with `knowledge_chunks` for BM25 retrieval
+- `conversations` and `messages`, `warranty_claims`, `service_requests` (appointments),
+  `notifications`, and `lifecycle_events` for idempotency
+
+Behaviour:
+- **Product Support AI:** retrieves excerpts, then answers only from them. Cited ids are validated,
+  and numbers not found in the excerpts are rejected. With nothing retrieved there is no LLM call;
+  the answer is a fixed "couldn't find it".
+- **Warranty:** a deterministic eligibility check plus retrieved policy text. A human decides unless
+  `warranty_auto_approve` is on.
+- **Lifecycle follow-ups:** setup help, check-in, warranty expiry and post-service messages. They are
+  gated by the policy switch, customer preference, suppression, a 7-day frequency cap, and one row
+  per event.
+- **Roles:** `users.role` is `owner` or `customer`. Owner routes use `current_user` (owner-only) and
+  portal routes use `current_customer`.
+
 ## Data model
 
 ```text
@@ -129,6 +199,11 @@ organizations ─┬─ users
                                      ├─ email_replies
                                      └─ followups
 agent_runs, jobs (operational)
+workflows ─ workflow_events (trace)   memory_entries   approvals   business_policies
+customers ─┬─ purchases ─ products ─ knowledge_documents ─ knowledge_chunks
+           ├─ warranty_claims   ├─ service_requests   ├─ conversations ─ messages
+           ├─ notifications     └─ lifecycle_events
+users.role = owner | customer (customer users → customers.id)
 ```
 
 Every tenant table carries `organization_id`. API lookups go through

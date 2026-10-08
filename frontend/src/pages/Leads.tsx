@@ -16,6 +16,23 @@ export default function Leads() {
   const campaigns = useAsync(() => api.get<Campaign[]>("/campaigns"));
   const [form, setForm] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulk, setBulk] = useState("");
+  const [bulkResult, setBulkResult] = useState<string | null>(null);
+
+  async function importBulk(e: FormEvent) {
+    e.preventDefault();
+    const prospects = bulk.split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((r) => r[0])
+      .map(([company_name, contact_email, contact_name = "", contact_role = "", notes = "", website = ""]) =>
+        ({ company_name, contact_email, contact_name, contact_role, notes, website }));
+    const campaign_id = form.campaign_id || campaigns.data?.[0]?.id || "";
+    const res = await action.run("import", () => api.post<{ created: number; results: { company_name: string; status: string; reason?: string }[] }>("/leads/bulk", { campaign_id, prospects }));
+    if (res) {
+      const skipped = res.results.filter((r) => r.status === "skipped");
+      setBulkResult(`${res.created} imported${skipped.length ? `; skipped: ${skipped.map((r) => `${r.company_name} (${r.reason})`).join(", ")}` : ""}`);
+      leads.reload();
+    }
+  }
   const action = useAction();
   const navigate = useNavigate();
 
@@ -37,10 +54,25 @@ export default function Leads() {
             <option value="">All campaigns</option>
             {campaigns.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
+          <button onClick={() => setShowBulk(!showBulk)}>{showBulk ? "Close import" : "Import prospects"}</button>
           <button className="primary" onClick={() => setShowForm(!showForm)}>{showForm ? "Close" : "Add lead"}</button>
         </div>
       </div>
       <ErrorBanner error={leads.error ?? action.error} onClose={() => action.setError(null)} />
+
+      {showBulk && (
+        <Card title="Import prospects">
+          <p className="small muted">One prospect per line: <code>Company | email | contact name | role | notes (evidence) | website</code>. Opted-out and duplicate contacts are skipped by the backend.</p>
+          <form className="stack" onSubmit={importBulk}>
+            <select value={form.campaign_id} onChange={set("campaign_id")}>
+              {campaigns.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <textarea rows={5} value={bulk} onChange={(e) => setBulk(e.target.value)} placeholder="Northgate Physio | morgan@northgate.example | Morgan Blake | Ops Director | Runs 6 clinics with 140 employees" />
+            <button className="primary" disabled={!!action.busy}>Import</button>
+          </form>
+          {bulkResult && <p className="small">{bulkResult}</p>}
+        </Card>
+      )}
 
       {showForm && (
         <Card title="New lead">

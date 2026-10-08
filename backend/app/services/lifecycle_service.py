@@ -76,21 +76,24 @@ def process_lifecycle(db: Session, container: Container, organization_id, today:
     now = datetime.now(timezone.utc)
     policy = get_policy(db, organization_id)
     profile = db.scalar(select(BusinessProfile).where(BusinessProfile.organization_id == organization_id))
-    outcomes = {"sent": 0, "blocked": 0, "skipped_existing": 0, "failed": 0}
+    outcomes = {"sent": 0, "blocked": 0, "deferred": 0, "skipped_existing": 0, "failed": 0}
     for ev in due_events(db, organization_id, today):
         if db.scalar(select(LifecycleEvent.id).where(LifecycleEvent.dedupe_key == ev["dedupe"])):
             outcomes["skipped_existing"] += 1
             continue
         customer, product, purchase = ev["customer"], ev["product"], ev["purchase"]
+        blocked = _blocked_reason(db, customer, policy, now)
+        if blocked and blocked.startswith("Frequency"):
+            # Deferred, not dropped: retried on a later run once the window allows. No trace spam per tick.
+            outcomes["deferred"] = outcomes.get("deferred", 0) + 1
+            continue
         wf = wfs.start_workflow(db, organization_id, WorkflowType.LIFECYCLE, goal=f"Lifecycle: {ev['event']}",
                                 customer_id=customer.id)
-        blocked = _blocked_reason(db, customer, policy, now)
         if blocked:
             wfs.record(db, wf, "safety", "Lifecycle policy check", TraceStatus.BLOCKED, blocked, state=WorkflowState.BLOCKED)
-            # Opt-outs are permanent for this event; frequency blocks are retried on a later run.
-            if not blocked.startswith("Frequency"):
-                db.add(LifecycleEvent(organization_id=organization_id, customer_id=customer.id, event_type=ev["event"],
-                                      dedupe_key=ev["dedupe"], status="BLOCKED", reason=blocked))
+            # Opt-outs / disabled rules are permanent for this event.
+            db.add(LifecycleEvent(organization_id=organization_id, customer_id=customer.id, event_type=ev["event"],
+                                  dedupe_key=ev["dedupe"], status="BLOCKED", reason=blocked))
             outcomes["blocked"] += 1
             db.commit()
             continue

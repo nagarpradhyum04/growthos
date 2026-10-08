@@ -31,20 +31,28 @@ export default function Analytics() {
   const action = useAction();
   const m = data.data?.overall;
 
+  const [stored, setStored] = useState<string[] | null>(null);
   async function generate() {
-    const res = await action.run("insights", () => api.post<{ insights: Insights }>("/analytics/insights"));
-    if (res) setInsights(res.insights);
+    const res = await action.run("insights", () => api.post<{ insights: Insights; stored_insights: string[] }>("/analytics/insights"));
+    if (res) {
+      setInsights(res.insights);
+      setStored(res.stored_insights);
+    }
   }
 
   const funnel = m
     ? [
         { label: "Leads", value: m.leads_total },
         { label: "Qualified", value: m.leads_qualified },
-        { label: "Contacts emailed", value: m.contacts_emailed },
-        { label: "Contacts replied", value: m.contacts_replied },
+        { label: "Contacted", value: m.contacts_emailed },
+        { label: "Replied", value: m.contacts_replied },
         { label: "Interested", value: m.interested_contacts },
+        { label: "Meeting requests", value: m.meeting_requests },
+        { label: "Conversions", value: m.conversions },
       ]
     : [];
+  const ei = data.data?.email_intelligence;
+  const lc = data.data?.lifecycle;
   const replyTotal = m ? Object.values(m.reply_breakdown).reduce((a, b) => a + b, 0) : 0;
   const buckets = REPLY_BUCKETS.map((b) => ({
     label: b.label,
@@ -96,11 +104,37 @@ export default function Analytics() {
         </Card>
       </div>
 
+      <div className="grid-2">
+        <Card title="Email intelligence">
+          {!ei || ei.routine + ei.opportunity + ei.human_attention + ei.opt_out === 0 ? <Empty>No classified messages yet.</Empty> : (
+            <div className="funnel">
+              {([["Routine (GREEN)", ei.routine], ["Opportunity (YELLOW)", ei.opportunity], ["Human attention (RED)", ei.human_attention], ["Opt-out", ei.opt_out]] as [string, number][]).map(([l, v]) => (
+                <HBar key={l} label={l} value={v} max={Math.max(ei.routine, ei.opportunity, ei.human_attention, ei.opt_out)} />
+              ))}
+              {ei.unclassified > 0 && <p className="muted small">{ei.unclassified} not yet analyzed.</p>}
+            </div>
+          )}
+        </Card>
+        <Card title="Customer lifecycle">
+          {!lc || lc.customers === 0 ? <Empty>No customers yet.</Empty> : (
+            <div className="stats mini">
+              <Stat label="Customers" value={lc.customers} hint={`${lc.purchases} purchases`} />
+              <Stat label="Support questions" value={lc.support_questions} />
+              <Stat label="Customer messages" value={lc.customer_messages} />
+              <Stat label="Warranty requests" value={lc.warranty_requests} />
+              <Stat label="Service requests" value={lc.service_requests} />
+              <Stat label="Lifecycle messages" value={lc.lifecycle_messages_sent} />
+              <Stat label="Repeat customers" value={lc.repeat_customers} hint="retention signal" />
+            </div>
+          )}
+        </Card>
+      </div>
+
       <Card title="Campaign comparison">
         {campaigns.length === 0 ? <Empty>No campaigns yet.</Empty> : (
           <table>
             <thead>
-              <tr><th>Campaign</th><th className="num">Leads</th><th className="num">Qualified</th><th className="num">Emails sent</th><th className="num">Replies</th><th>Reply rate</th><th className="num">Interested conversion</th></tr>
+              <tr><th>Campaign</th><th className="num">Leads</th><th className="num">Qualified</th><th className="num">Emails sent</th><th className="num">Replies</th><th>Reply rate</th><th className="num">Positive replies</th><th className="num">Conversions</th><th className="num">Personalized</th></tr>
             </thead>
             <tbody>
               {campaigns.map((c) => (
@@ -118,7 +152,9 @@ export default function Analytics() {
                       </div>
                     )}
                   </td>
-                  <td className="num">{pct(c.conversion_rate_pct)}</td>
+                  <td className="num">{c.positive_replies}</td>
+                  <td className="num">{c.conversions}</td>
+                  <td className="num">{pct(c.personalized_pct)}</td>
                 </tr>
               ))}
             </tbody>
@@ -136,6 +172,9 @@ export default function Analytics() {
               <div><h3>What didn't</h3>{insights.what_did_not_work.length ? <ul>{insights.what_did_not_work.map((x) => <li key={x}>{x}</li>)}</ul> : <p className="muted small">Nothing conclusive yet.</p>}</div>
               <div><h3>Recommendations</h3><ul>{insights.recommendations.map((x) => <li key={x}>{x}</li>)}</ul></div>
             </div>
+            {stored && (stored.length ? (
+              <p className="rule-note">✓ {stored.length} insight(s) stored in shared memory. The Orchestrator loads them for the Outreach Agent on the next workflow. <a href="/memory">View memory →</a></p>
+            ) : <p className="muted small">Not enough data yet — nothing was stored as a learning.</p>)}
           </>
         )}
       </Card>

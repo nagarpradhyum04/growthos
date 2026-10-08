@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { TierBadge } from "../components/trace";
 import { Badge, Card, Empty, ErrorBanner, when } from "../components/ui";
 import { useAction, useAsync } from "../components/useAsync";
 import type { ReplyWithContext } from "../types";
@@ -17,7 +18,7 @@ const MEANING: Record<string, string> = {
   UNKNOWN: "Unclear — a human should read it",
 };
 
-export default function Replies() {
+export default function Replies({ embedded = false }: { embedded?: boolean }) {
   const [filter, setFilter] = useState("");
   const replies = useAsync(
     () => api.get<ReplyWithContext[]>(`/replies${filter === "attention" ? "?needs_attention=true" : filter ? `?classification=${filter}` : ""}`),
@@ -34,7 +35,7 @@ export default function Replies() {
     <>
       <div className="page-header">
         <div>
-          <h1>Replies</h1>
+          {!embedded && <h1>Replies</h1>}
           <p className="muted page-sub">Backend rules act first (any reply stops follow-ups; opt-out language suppresses instantly). The Reply Analysis Agent then classifies and recommends.</p>
         </div>
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -52,6 +53,7 @@ export default function Replies() {
 
 function ReplyCard({ r, analyzing, onAnalyze }: { r: ReplyWithContext; analyzing: boolean; onAnalyze: () => void }) {
   const cls = r.classification;
+  const ext = r as ReplyWithContext & { tier?: string | null; escalation_reason?: string | null; suggested_response?: string | null };
   const byAgent = !!r.agent_run_id;
   const detected: { ok: boolean; text: string }[] = [];
   if (cls) detected.push({ ok: true, text: MEANING[cls] ?? cls });
@@ -74,6 +76,7 @@ function ReplyCard({ r, analyzing, onAnalyze }: { r: ReplyWithContext; analyzing
       <header className="reply-card-head">
         <div className="reply-class">
           <Badge value={cls ?? "PENDING"} />
+          <TierBadge tier={ext.tier} />
           <span className="muted small">Confidence: not reported by the agent</span>
         </div>
         <div className="actions">
@@ -94,6 +97,8 @@ function ReplyCard({ r, analyzing, onAnalyze }: { r: ReplyWithContext; analyzing
           <div>
             <h3>Recommended</h3>
             <ul className="arrows">{r.recommended_action ? <li>→ {r.recommended_action}</li> : <li className="muted">—</li>}</ul>
+            {ext.escalation_reason && <p className="small"><b>Tier reason:</b> {ext.escalation_reason}</p>}
+            {ext.suggested_response && <p className="small"><b>Suggested reply:</b> {ext.suggested_response}</p>}
           </div>
           <div>
             <h3>Actions taken by backend</h3>

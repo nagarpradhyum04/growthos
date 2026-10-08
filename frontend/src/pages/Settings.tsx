@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import { Card, ErrorBanner, Notice } from "../components/ui";
 import { useAction, useAsync } from "../components/useAsync";
-import type { Me } from "../types";
+import type { Me, Policy } from "../types";
 
 interface Profile {
   company_name: string;
@@ -88,6 +88,7 @@ export default function Settings() {
           <div className="span-2"><button className="primary" disabled={!!action.busy}>Save profile</button></div>
         </form>
       </Card>
+      <PolicyCard />
       {me.data && (
         <Card title="Sending mode">
           <label className="checkbox">
@@ -100,5 +101,68 @@ export default function Settings() {
         </Card>
       )}
     </>
+  );
+}
+
+const RULE_LABELS: Record<string, string> = {
+  purchase_intent: "Purchase intent", large_order: "Large order", pricing_inquiry: "Pricing inquiry",
+  discount_request: "Discount request", meeting_request: "Meeting request", routine_question: "Routine question",
+  greeting: "Greeting / thanks", brochure_request: "Brochure / info request",
+};
+
+function PolicyCard() {
+  const policy = useAsync(() => api.get<Policy>("/policy"));
+  const [p, setP] = useState<Policy | null>(null);
+  const action = useAction();
+  useEffect(() => { if (policy.data) setP(policy.data); }, [policy.data]);
+  if (!p) return null;
+  const set = <K extends keyof Policy>(k: K, v: Policy[K]) => setP({ ...p, [k]: v });
+  async function save() {
+    const { locked_categories: _locked, ...body } = p!;
+    void _locked;
+    if (await action.run("policy", () => api.put("/policy", body), "Rules saved. The backend enforces them on every action.")) policy.reload();
+  }
+  return (
+    <Card title="Automation & safety rules" actions={<span className="muted small">enforced by the backend, never by the AI</span>}>
+      <ErrorBanner error={action.error} onClose={() => action.setError(null)} />
+      <Notice message={action.notice} />
+      <div className="form-grid">
+        <label>Max messages per person / 30 days
+          <input type="number" min={1} value={p.max_messages_per_contact_30d} onChange={(e) => set("max_messages_per_contact_30d", Number(e.target.value))} />
+        </label>
+        <label>Minimum hours between messages
+          <input type="number" min={0} value={p.min_hours_between_messages} onChange={(e) => set("min_hours_between_messages", Number(e.target.value))} />
+        </label>
+        <label>Never contact these domains (comma separated)
+          <input value={p.blocked_domains.join(", ")} onChange={(e) => set("blocked_domains", e.target.value.split(",").map((x) => x.trim()).filter(Boolean))} />
+        </label>
+        <label>Banned phrases (block sending)
+          <input value={p.banned_phrases.join(", ")} onChange={(e) => set("banned_phrases", e.target.value.split(",").map((x) => x.trim()).filter(Boolean))} />
+        </label>
+        <label>Large order threshold (value)
+          <input type="number" min={0} value={p.large_order_threshold} onChange={(e) => set("large_order_threshold", Number(e.target.value))} />
+        </label>
+        <label>Lifecycle messages per customer / 7 days
+          <input type="number" min={0} value={p.lifecycle_max_per_7d} onChange={(e) => set("lifecycle_max_per_7d", Number(e.target.value))} />
+        </label>
+      </div>
+      <h3>Escalation rules (incoming messages)</h3>
+      <table className="compact">
+        <tbody>
+          {Object.entries(p.escalation_rules).map(([k, v]) => (
+            <tr key={k}><td>{RULE_LABELS[k] ?? k}</td>
+              <td><select value={v} onChange={(e) => set("escalation_rules", { ...p.escalation_rules, [k]: e.target.value })}>
+                <option value="escalate">Escalate to me</option><option value="automate">Automate</option></select></td></tr>
+          ))}
+          <tr><td>{p.locked_categories.map((c) => c.replace("_", " ")).join(", ")}</td><td><span className="badge bad">Always escalated (locked)</span></td></tr>
+        </tbody>
+      </table>
+      <div className="stack" style={{ marginTop: 10 }}>
+        <label className="checkbox"><input type="checkbox" checked={p.auto_handle_routine} onChange={(e) => set("auto_handle_routine", e.target.checked)} /> Auto-handle routine customer messages (answers only from the knowledge base)</label>
+        <label className="checkbox"><input type="checkbox" checked={p.lifecycle_enabled} onChange={(e) => set("lifecycle_enabled", e.target.checked)} /> Send lifecycle follow-ups (setup help, check-ins, warranty expiry, post-service)</label>
+        <label className="checkbox"><input type="checkbox" checked={p.warranty_auto_approve} onChange={(e) => set("warranty_auto_approve", e.target.checked)} /> Auto-approve warranty claims that pass the eligibility rules (off = always human)</label>
+      </div>
+      <button className="primary" onClick={save} disabled={!!action.busy}>Save rules</button>
+    </Card>
   );
 }

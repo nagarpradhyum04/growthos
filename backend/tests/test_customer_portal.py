@@ -155,7 +155,7 @@ def test_lifecycle_follow_up_sent_once_and_respects_opt_out(client, auth):
     msgs = client.get("/portal/conversations", headers=portal).json()
     assert msgs and msgs[0]["sender"] == "ai"
     again = client.post("/lifecycle/run", headers=auth).json()
-    assert again["sent"] == 0 and again["blocked"] >= 1  # frequency limit holds the second event
+    assert again["sent"] == 0 and again["deferred"] >= 1  # frequency limit defers the second event
     client.patch("/portal/preferences", headers=portal, json={"lifecycle_messages": False})
     _, c2, _, portal2 = make_product_and_customer(client, auth, purchased_at=purchased, email="q@clinic.example")
     client.patch("/portal/preferences", headers=portal2, json={"lifecycle_messages": False})

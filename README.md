@@ -1,6 +1,19 @@
 # GrowthOS
 
-GrowthOS is a small multi-agent growth operating system. It acts as an AI growth team that:
+**An AI operating system for business growth and customer relationships.**
+The lifecycle runs Lead → Outreach → Conversion → Purchase → Support → Warranty → Service → Retention →
+Analytics → Learning.
+
+> AI handles the routine. AI identifies the important. Humans control important business decisions.
+
+- Specialist agents do the work, coordinated by an **Orchestrator** that owns workflow state and traces
+  every step.
+- **Shared memory** gives the agents context.
+- A **Safety Agent / policy layer** that is independent of the LLM keeps them responsible.
+- An **approvals inbox** escalates only what matters, and always says why.
+- **Analytics insights** are stored in memory and reused by future workflows.
+
+The sales core (unchanged from the MVP) acts as an AI growth team that:
 
 1. **Researches** a lead from public evidence and cites its sources.
 2. **Qualifies** the lead with an explainable, rule-computed score.
@@ -81,7 +94,51 @@ npm run dev                              # http://localhost:5173 (proxies /api �
 7. Try **Forget Me**: outreach stops, personal data is erased, and the address can never be
    re-imported.
 
-## Hackathon demo script
+## Full product demo (business owner + customer)
+
+Load the demo dataset, a fictional business called "Nimbus Air":
+
+```bash
+cd backend && python -m app.demo_seed
+```
+
+It inserts plain records only: prospects, products, documentation, and one customer. It does not
+fabricate agent output, metrics or traces; those come from actually running the agents.
+
+| Role | Login |
+| --- | --- |
+| Business owner | `demo@growthos.example` / `demo-password` |
+| Customer | `customer@growthos.example` / `demo-password` |
+
+Keep the worker running for the goal workflow, follow-ups and lifecycle messages.
+
+1. **Owner → Command Center:** run the goal *"Find high-quality customers for our business"*. The
+   Orchestrator plans the goal and fans out to one lead workflow per prospect. The workflow page shows
+   the live orchestration flow and agent trace:
+   - Research, Qualification and Outreach run on every prospect.
+   - The Safety Agent checks each draft.
+   - Drafts are routed to human review.
+
+   In the demo data, 3 prospects qualify and 2 do not get contacted.
+2. **Approvals:** every card explains *why* it needs you. *Approve & send* goes through `can_send()`.
+3. **A reply arrives:** on a lead, log *"We'd like to order 20 units — could you do a 10% discount?"*.
+   - Email Intelligence classifies it **YELLOW** and escalates it, quoting the detected
+     discount/purchase intent.
+   - A *"thanks!"* reply stays GREEN and is not escalated.
+4. **Win the deal:** on the lead, click *Convert to customer* and grant portal access.
+5. **Customer → portal:** the customer sees their products with warranty status and does the following:
+   - Asks the Support AI *"What does error E2 mean?"* and gets an answer that cites the manual.
+   - Asks something that isn't documented. The AI answers *"I couldn't find that information…"*.
+   - Submits a warranty claim, books a repair, and sends a complaint, which is escalated **RED**.
+6. **Owner → Warranty & Service:** the page shows the deterministic eligibility check and the
+   relevant policy text. Approve the claim, confirm the appointment, and run lifecycle follow-ups,
+   which respect preferences and frequency limits.
+7. **Analytics:** the funnel, email-intelligence mix and lifecycle metrics are shown. *Generate
+   insights* stores learnings in **Shared Memory**.
+8. **Run another goal:** its trace shows *"Read shared memory: N learned insight(s)…"*, so the next
+   Outreach run uses what was learned.
+
+## Hackathon demo script (sales flow)
 
 The UI is built to make the multi-agent system visible. *Agents reason and recommend;
 deterministic backend rules and human approval control what the system may do.*
@@ -110,6 +167,15 @@ deterministic backend rules and human approval control what the system may do.*
 returns *Unknown* everywhere, the score is low (20/100), Outreach shows **Blocked**, and no email
 is written. Pause the campaign on a lead with a draft to see **SEND BLOCKED** with the exact
 reason.
+
+## Roles
+
+- **Owners** use every business endpoint.
+- **Customers** (portal users created by the owner) can only call `/portal/*`.
+
+This is enforced server-side: owner endpoints return 403 for customer tokens and vice versa. Every
+portal query is scoped to the customer bound to the token. Portal responses never include lead
+scores, tiers, agent reasoning, campaign data or other customers.
 
 ## Using real providers
 
@@ -209,8 +275,40 @@ GET|POST /public/unsubscribe?token=…   (link included in every email)
 POST /webhooks/inbound-email | email-status
 ```
 
+GrowthOS OS layer:
+
+```text
+POST /workflows/goal   GET /workflows   GET /workflows/{id} (trace + children)   GET /trace
+GET /approvals   POST /approvals/{id}/approve | reject | take-over | mark-automated
+GET|POST /memory   DELETE /memory/{id}          GET|PUT /policy
+POST /leads/bulk   POST /leads/{id}/convert
+GET|POST /customers   GET /customers/{id}   POST /customers/{id}/purchases | portal-access | messages
+GET|POST|PUT /products   GET|POST|PUT|DELETE /knowledge   POST /knowledge/search   GET /inbox
+GET /warranty-claims   PATCH /warranty-claims/{id}   GET /service-requests   PATCH /service-requests/{id}
+POST /lifecycle/run    GET /notifications
+Portal: GET /portal/me | products | products/{purchase_id} | warranty | service | appointments |
+        conversations | notifications    POST /portal/support/ask | warranty | service |
+        service/{id}/cancel | conversations    PATCH /portal/preferences
+```
+
 Errors always come back as `{"error": {"code", "message", "details"}}`. Stack traces are logged,
 never returned.
+
+## Known limitations
+
+- **Prospect discovery:** the Research Agent researches prospects you import (single or bulk). It
+  does not crawl the web to discover new companies.
+- **Replies to prospects:** Email Intelligence drafts a suggested response for escalated *prospect*
+  replies, but you send it from your own inbox. Only customer-portal conversations are answered
+  in-app.
+- **Retrieval:** knowledge retrieval uses lexical BM25 in Postgres. `knowledge_service.retrieve()`
+  is the seam for swapping in embeddings (e.g. pgvector).
+- **Confidence:** agent confidence is shown only where an agent actually produces it (research,
+  outreach drafts). Email tiers come from rules, not model confidence.
+- **Lifecycle delivery:** lifecycle messages are delivered to the customer portal (as message and
+  notification), not by email.
+- **Mock adapters:** with the mock LLM adapter the agents are rule-based stand-ins, so text quality is
+  basic. Run the evals with a real provider before relying on prompts.
 
 ## Deliberately out of scope
 

@@ -1,6 +1,7 @@
 // Thin fetch wrapper around the GrowthOS API. All requests carry the JWT; errors become ApiError.
 const BASE = import.meta.env.VITE_API_URL ?? "/api";
 const TOKEN_KEY = "growthos_token";
+const ROLE_KEY = "growthos_role";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string, public details: Record<string, unknown> = {}) {
@@ -12,11 +13,16 @@ export const auth = {
   get token() {
     return localStorage.getItem(TOKEN_KEY);
   },
-  set(token: string) {
+  get role(): "owner" | "customer" {
+    return localStorage.getItem(ROLE_KEY) === "customer" ? "customer" : "owner";
+  },
+  set(token: string, role: string = "owner") {
     localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(ROLE_KEY, role);
   },
   clear() {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(ROLE_KEY);
   },
 };
 
@@ -52,10 +58,13 @@ export const api = {
   post: <T>(path: string, body?: unknown) => request<T>("POST", path, body),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body),
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
+  del: <T>(path: string) => request<T>("DELETE", path),
 };
 
 export function describeError(err: unknown): string {
   if (err instanceof ApiError) {
+    const explanation = err.details?.explanation as string | undefined;
+    if (explanation) return `${err.message} ${explanation}.`;
     const reasons = err.details?.reasons as string[] | undefined;
     if (reasons?.length) return `${err.message} Reasons: ${reasons.map((r) => r.replace(/_/g, " ")).join(", ")}.`;
     const fields = err.details?.fields as { field: string; message: string }[] | undefined;

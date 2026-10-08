@@ -187,6 +187,11 @@ class ReplyOut(ORM):
     opt_out_detected: bool
     analyzed_at: datetime | None
     agent_run_id: uuid.UUID | None = None  # set when the Reply Analysis Agent (not only rules) classified it
+    tier: str | None = None
+    intents: list[str] = []
+    escalation_reason: str | None = None
+    suggested_response: str | None = None
+    sentiment: str | None = None
 
 
 class ReplyWithContext(ReplyOut):

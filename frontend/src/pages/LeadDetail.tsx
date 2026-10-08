@@ -1,15 +1,16 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { AgentActivity } from "../components/AgentActivity";
 import { fmtUnknown, leadStages } from "../components/agents";
 import { SafetyPanel } from "../components/SafetyPanel";
 import { Timeline } from "../components/Timeline";
 import { Badge, Card, Empty, ErrorBanner, Notice, when } from "../components/ui";
-import { useAction } from "../components/useAsync";
+import { useAction, useAsync } from "../components/useAsync";
 import { WorkflowPipeline } from "../components/WorkflowPipeline";
 import { describeError } from "../api";
-import type { AgentRun, Contact, EmailReview, Job, LeadDetail as Lead, ResearchData } from "../types";
+import { TraceFeed } from "../components/trace";
+import type { AgentRun, Contact, CustomerRow, EmailReview, Job, LeadDetail as Lead, MemoryItem, ProductRow, ResearchData, TraceEvent } from "../types";
 
 type Criterion = { rating: string; weight: number; points: number; evidence: string };
 const CRITERIA: [string, string][] = [
@@ -24,6 +25,8 @@ interface State {
   runs: AgentRun[];
   orgRuns: AgentRun[];
   review: EmailReview | null;
+  trace: TraceEvent[];
+  memory: MemoryItem[];
 }
 
 export default function LeadDetail() {
@@ -36,15 +39,17 @@ export default function LeadDetail() {
 
   const load = useCallback(async () => {
     try {
-      const [lead, runs, orgRuns] = await Promise.all([
+      const [lead, runs, orgRuns, trace, memory] = await Promise.all([
         api.get<Lead>(`/leads/${id}`),
         api.get<AgentRun[]>(`/agent-runs?lead_id=${id}&limit=100`),
         api.get<AgentRun[]>(`/agent-runs?agent_name=analytics&limit=1`),
+        api.get<TraceEvent[]>(`/trace?lead_id=${id}&limit=100`),
+        api.get<MemoryItem[]>(`/memory?scope=lead&subject_id=${id}`),
       ]);
       const initial = lead.emails.find((e) => e.sequence_number === 0);
       const review = initial ? await api.get<EmailReview>(`/emails/${initial.id}`) : null;
       if (alive.current) {
-        setState({ lead, runs, orgRuns, review });
+        setState({ lead, runs, orgRuns, review, trace: [...trace].reverse(), memory });
         setLoadError(null);
       }
     } catch (err) {
@@ -191,6 +196,21 @@ export default function LeadDetail() {
             </>
           )}
         </Card>
+      </div>
+
+      <div className="grid-2">
+        <Card title="Agent trace" actions={<Link to={`/workflows?lead=${l.id}`}>Workflows →</Link>}>
+          <TraceFeed events={state.trace} compact />
+        </Card>
+        <div>
+          <Card title="Shared memory" actions={<span className="muted small">written &amp; read by agents</span>}>
+            {state.memory.length === 0 && <p className="empty">Nothing stored for this lead yet.</p>}
+            <ul className="memory-list">
+              {state.memory.map((m) => <li key={m.id}><span className={`mem-cat cat-${m.category}`}>{m.key}</span> {m.content}<div className="muted small">by {m.source}</div></li>)}
+            </ul>
+          </Card>
+          <ConvertCard lead={l} onDone={load} />
+        </div>
       </div>
 
       <div className="grid-2">
@@ -418,6 +438,38 @@ function RepliesCard({ lead, onChanged }: { lead: Lead; onChanged: () => void })
           <button disabled={!!action.busy}>Record reply</button>
         </form>
       )}
+    </Card>
+  );
+}
+
+function ConvertCard({ lead, onDone }: { lead: Lead; onDone: () => void }) {
+  const products = useAsync(() => api.get<ProductRow[]>("/products"));
+  const [form, setForm] = useState({ product_id: "", quantity: 1, order_value: "", serial_number: "" });
+  const action = useAction();
+  const navigate = useNavigate();
+  if (lead.status === "CONVERTED") return <Card title="Customer"><p className="small"><Badge value="CONVERTED" /> This lead is now a customer. <Link to="/customers">Customers →</Link></p></Card>;
+  if (lead.status === "SUPPRESSED") return null;
+  async function convert(e: FormEvent) {
+    e.preventDefault();
+    const c = await action.run("convert", () => api.post<CustomerRow>(`/leads/${lead.id}/convert`, {
+      product_id: form.product_id || null, quantity: form.quantity, serial_number: form.serial_number,
+      order_value: form.order_value ? Number(form.order_value) : null,
+    }));
+    if (c) { onDone(); navigate(`/customers/${c.id}`); }
+  }
+  return (
+    <Card title="Close the deal" actions={<span className="muted small">owner decision</span>}>
+      <ErrorBanner error={action.error} />
+      <p className="small muted">When the deal is won, convert this lead into a customer. Their history moves into customer memory and they can use the portal.</p>
+      <form className="inline-form" onSubmit={convert}>
+        <select value={form.product_id} onChange={(e) => setForm({ ...form, product_id: e.target.value })}>
+          <option value="">No purchase yet</option>
+          {products.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+        <input type="number" min={1} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} style={{ width: 70 }} />
+        <input placeholder="Order value" value={form.order_value} onChange={(e) => setForm({ ...form, order_value: e.target.value })} style={{ width: 110 }} />
+        <button className="primary" disabled={!!action.busy}>Convert to customer</button>
+      </form>
     </Card>
   );
 }

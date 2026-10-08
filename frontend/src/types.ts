@@ -1,5 +1,5 @@
 export type LeadStatus =
-  | "NEW" | "RESEARCHED" | "QUALIFIED" | "DISQUALIFIED" | "DRAFTED" | "CONTACTED" | "REPLIED" | "COMPLETED" | "SUPPRESSED";
+  | "NEW" | "RESEARCHED" | "QUALIFIED" | "DISQUALIFIED" | "DRAFTED" | "CONTACTED" | "REPLIED" | "COMPLETED" | "SUPPRESSED" | "CONVERTED";
 export type EmailStatus =
   | "DRAFT" | "APPROVED" | "SCHEDULED" | "SENT" | "DELIVERED" | "REPLIED" | "FAILED" | "SUPPRESSED" | "COMPLETED";
 
@@ -197,10 +197,25 @@ export interface Metrics {
   conversion_rate_pct: number | null;
   contacts_suppressed: number;
   reply_breakdown: Record<string, number>;
+  meeting_requests: number;
+  positive_replies: number;
+  conversions: number;
+  personalized_pct: number | null;
 }
 
 export interface Analytics {
-  overall: Metrics & { campaigns_total: number; active_campaigns: number };
+  overall: Metrics & { campaigns_total: number; active_campaigns: number; pending_approvals: number; open_opportunities: number };
+  email_intelligence: { routine: number; opportunity: number; human_attention: number; opt_out: number; unclassified: number };
+  lifecycle: {
+    customers: number;
+    purchases: number;
+    support_questions: number;
+    customer_messages: number;
+    warranty_requests: number;
+    service_requests: number;
+    lifecycle_messages_sent: number;
+    repeat_customers: number;
+  };
   campaigns: (Metrics & { campaign_id: string; name: string; status: string; target_audience: string })[];
 }
 
@@ -225,4 +240,269 @@ export interface TimelineEvent {
   type: string;
   description: string;
   actor: "agent" | "human" | "system" | "contact";
+}
+
+// ---------------- Orchestrator / trace ----------------
+export interface TraceEvent {
+  id: string;
+  workflow_id: string;
+  agent: string;
+  action: string;
+  status: "STARTED" | "COMPLETED" | "SKIPPED" | "WAITING" | "ESCALATED" | "BLOCKED" | "FAILED" | "RETRYING";
+  result: string;
+  detail: Record<string, unknown>;
+  state_after: string | null;
+  lead_id: string | null;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+  workflow_type?: string;
+  goal?: string;
+  company_name?: string | null;
+}
+
+export interface WorkflowSummary {
+  id: string;
+  type: "GOAL" | "LEAD" | "INBOUND" | "LIFECYCLE";
+  goal: string;
+  state: string;
+  parent_id: string | null;
+  lead_id: string | null;
+  campaign_id: string | null;
+  customer_id: string | null;
+  plan: string[];
+  summary: Record<string, number>;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  company_name: string | null;
+}
+
+export interface WorkflowDetail extends WorkflowSummary {
+  events: TraceEvent[];
+  children: WorkflowSummary[];
+}
+
+export interface ApprovalItem {
+  id: string;
+  type: "OUTBOUND_EMAIL" | "REPLY_ESCALATION" | "MESSAGE_ESCALATION" | "WARRANTY_CLAIM" | "SERVICE_REQUEST";
+  status: string;
+  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
+  tier: "GREEN" | "YELLOW" | "RED" | null;
+  category: string;
+  title: string;
+  reason: string;
+  recommended_action: string;
+  suggested_response: string;
+  lead_id: string | null;
+  company_name: string | null;
+  customer_id: string | null;
+  customer_name: string | null;
+  workflow_id: string | null;
+  can_automate: boolean;
+  subject: Record<string, unknown>;
+  created_at: string;
+  resolved_at: string | null;
+  resolution_note: string | null;
+}
+
+export interface MemoryItem {
+  id: string;
+  scope: string;
+  subject_id: string | null;
+  category: string;
+  key: string;
+  content: string;
+  data: Record<string, unknown>;
+  source: string;
+  importance: number;
+  updated_at: string;
+}
+
+export interface Policy {
+  max_messages_per_contact_30d: number;
+  min_hours_between_messages: number;
+  blocked_domains: string[];
+  banned_phrases: string[];
+  escalation_rules: Record<string, string>;
+  large_order_threshold: number;
+  auto_handle_routine: boolean;
+  warranty_auto_approve: boolean;
+  lifecycle_enabled: boolean;
+  lifecycle_rules: Record<string, number>;
+  lifecycle_max_per_7d: number;
+  locked_categories: string[];
+}
+
+// ---------------- Customers ----------------
+export interface WarrantyInfo {
+  status: "ACTIVE" | "EXPIRING_SOON" | "EXPIRED" | "NO_WARRANTY";
+  days_left: number | null;
+}
+
+export interface PurchaseRow {
+  id: string;
+  product_id: string;
+  product_name: string;
+  sku: string;
+  category: string;
+  purchased_at: string;
+  warranty_expires_at: string | null;
+  warranty: WarrantyInfo;
+  serial_number: string;
+  quantity: number;
+  order_value: number | null;
+  status: string;
+}
+
+export interface OwnerMessage {
+  id: string;
+  channel: string;
+  sender: "customer" | "business" | "ai";
+  body: string;
+  tier: "GREEN" | "YELLOW" | "RED" | null;
+  intents: string[];
+  analysis: Record<string, unknown>;
+  sources: { title: string; section: string }[];
+  handled_automatically: boolean;
+  created_at: string;
+  customer_id: string;
+  customer_name?: string;
+}
+
+export interface CustomerRow {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  company: string;
+  status: string;
+  lead_id: string | null;
+  notes: string;
+  preferences: Record<string, boolean>;
+  portal_access: boolean;
+  created_at: string;
+}
+
+export interface CustomerDetail extends CustomerRow {
+  purchases: PurchaseRow[];
+  warranty_claims: { id: string; issue: string; status: string; created_at: string }[];
+  service_requests: { id: string; issue: string; status: string; scheduled_for: string | null }[];
+  messages: OwnerMessage[];
+  memory: { category: string; key: string; content: string; source: string; updated_at: string }[];
+}
+
+export interface ProductRow {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  description: string;
+  warranty_months: number;
+  price: number | null;
+  active: boolean;
+}
+
+export interface KnowledgeDoc {
+  id: string;
+  title: string;
+  doc_type: string;
+  content: string;
+  product_id: string | null;
+  chunks: number | null;
+  updated_at: string;
+}
+
+export interface ClaimRow {
+  id: string;
+  issue: string;
+  status: string;
+  eligibility: {
+    likely_eligible?: boolean;
+    checks?: { check: string; passed: boolean; detail?: string }[];
+    warranty?: WarrantyInfo;
+    policy_excerpts?: { title: string; section: string; text: string }[];
+  };
+  resolution_note: string | null;
+  created_at: string;
+  customer_id: string;
+  customer_name: string;
+  product_name: string;
+  serial_number: string;
+  purchased_at: string;
+  warranty_expires_at: string | null;
+}
+
+export interface ServiceRow {
+  id: string;
+  issue: string;
+  status: string;
+  preferred_date: string | null;
+  preferred_time: string;
+  contact_phone: string;
+  contact_email: string;
+  scheduled_for: string | null;
+  owner_note: string | null;
+  created_at: string;
+  customer_id: string;
+  customer_name: string;
+  product_name: string;
+}
+
+// ---------------- Portal (customer-facing; no internal fields) ----------------
+export interface PortalProduct {
+  purchase_id: string;
+  product_name: string;
+  category: string;
+  description: string;
+  purchased_at: string;
+  serial_number: string;
+  quantity: number;
+  status: string;
+  warranty_expires_at: string | null;
+  warranty: WarrantyInfo;
+  warranty_months: number;
+}
+
+export interface PortalMessage {
+  id: string;
+  sender: "customer" | "business" | "ai";
+  body: string;
+  sources: { title: string; section: string }[];
+  created_at: string;
+}
+
+export interface PortalClaim {
+  id: string;
+  product_name: string;
+  purchase_id: string;
+  issue: string;
+  status: string;
+  resolution_note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PortalService {
+  id: string;
+  product_name: string;
+  purchase_id: string;
+  issue: string;
+  status: string;
+  preferred_date: string | null;
+  preferred_time: string;
+  scheduled_for: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+export interface PortalNotification {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  link: string;
+  read: boolean;
+  created_at: string;
 }

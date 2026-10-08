@@ -1,97 +1,100 @@
-import { Link } from "react-router-dom";
+import { type FormEvent, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { AGENTS, fmtDuration, summarizeRun, timeAgo } from "../components/agents";
+import { timeAgo } from "../components/agents";
+import { ApprovalCard, TRACE_AGENTS, TraceFeed } from "../components/trace";
 import { Badge, Card, Empty, ErrorBanner, Stat, pct } from "../components/ui";
-import { useAsync } from "../components/useAsync";
-import type { AgentRun, Analytics, Email, LeadListItem } from "../types";
+import { useAction, useAsync } from "../components/useAsync";
+import type { Analytics, ApprovalItem, Campaign, TraceEvent, WorkflowSummary } from "../types";
+
+const STATUS_AGENTS = ["orchestrator", "research", "qualification", "outreach", "safety", "email_intelligence",
+  "followup", "analytics", "support", "memory"];
+
+function agentState(events: TraceEvent[]): { label: string; tone: string; last?: TraceEvent } {
+  const last = events[0];
+  if (!last) return { label: "Idle", tone: "pending" };
+  if (last.status === "FAILED") return { label: "Failed", tone: "blocked", last };
+  if (last.status === "BLOCKED") return { label: "Blocked", tone: "blocked", last };
+  if (last.status === "WAITING" || last.status === "ESCALATED") return { label: "Waiting", tone: "waiting", last };
+  if (last.status === "RETRYING" || last.status === "STARTED") return { label: "Running", tone: "running", last };
+  return { label: "Operational", tone: "completed", last };
+}
 
 export default function Dashboard() {
   const analytics = useAsync(() => api.get<Analytics>("/analytics"));
-  const drafts = useAsync(() => api.get<Email[]>("/emails?status=DRAFT"));
-  const runs = useAsync(() => api.get<AgentRun[]>("/agent-runs?limit=200"));
-  const leads = useAsync(() => api.get<LeadListItem[]>("/leads?limit=500"));
+  const trace = useAsync(() => api.get<TraceEvent[]>("/trace?limit=200"));
+  const approvals = useAsync(() => api.get<ApprovalItem[]>("/approvals?status=PENDING"));
+  const campaigns = useAsync(() => api.get<Campaign[]>("/campaigns"));
+  const goals = useAsync(() => api.get<WorkflowSummary[]>("/workflows?workflow_type=GOAL&top_level=true&limit=3"));
   const m = analytics.data?.overall;
-  const companyOf = new Map((leads.data ?? []).map((l) => [l.id, l.company_name]));
+  const lc = analytics.data?.lifecycle;
+
+  function reloadAll() {
+    approvals.reload();
+    trace.reload();
+    analytics.reload();
+  }
 
   return (
     <>
       <h1>GrowthOS Command Center</h1>
-      <p className="muted page-sub">Six AI agents reason and recommend. Deterministic backend rules and human approval decide what is allowed to happen.</p>
-      <ErrorBanner error={analytics.error ?? drafts.error ?? runs.error} />
-      {m && (
+      <p className="muted page-sub">AI handles the routine and surfaces what's important. You make the important decisions.</p>
+      <ErrorBanner error={analytics.error ?? trace.error ?? approvals.error} />
+
+      <GoalLauncher campaigns={campaigns.data ?? []} />
+
+      {m && lc && (
         <div className="stats">
-          <Stat label="Active campaigns" value={m.active_campaigns} />
           <Stat label="Total leads" value={m.leads_total} />
           <Stat label="Qualified leads" value={m.leads_qualified} hint={`${m.leads_disqualified} not contacted`} />
-          <Stat label="Emails sent" value={m.emails_sent} />
-          <Stat label="Replies" value={m.replies} />
-          <Stat label="Interested leads" value={m.interested_contacts} hint={`conversion ${pct(m.conversion_rate_pct)}`} />
-          <Stat label="Follow-ups pending" value={m.followups_pending} hint={`${m.followups_sent} sent`} />
-          <Stat label="Reply rate" value={pct(m.reply_rate_pct)} hint={m.contacts_emailed ? `${m.contacts_replied} of ${m.contacts_emailed} contacts` : "no emails yet"} />
+          <Stat label="Active campaigns" value={m.active_campaigns} />
+          <Stat label="Pending approvals" value={m.pending_approvals} hint="need your decision" />
+          <Stat label="Customers" value={lc.customers} hint={`${m.conversions} converted from outreach`} />
+          <Stat label="Open opportunities" value={m.open_opportunities} hint="YELLOW escalations" />
+          <Stat label="Reply rate" value={pct(m.reply_rate_pct)} hint={`${m.emails_sent} emails sent`} />
+          <Stat label="Conversion rate" value={pct(m.leads_total ? Math.round((m.conversions / m.leads_total) * 1000) / 10 : null)} hint="leads → customers" />
         </div>
       )}
 
-      <Card title="Agent status" actions={<span className="muted small">From recorded agent runs</span>}>
-        <div className="agent-grid">
-          {Object.entries(AGENTS).map(([key, a]) => {
-            const mine = (runs.data ?? []).filter((r) => r.agent_name === key);
-            const last = mine[0];
-            const state = !last ? "idle" : last.status === "RUNNING" ? "running" : last.status === "FAILED" ? "failed" : "ready";
-            const ok = mine.filter((r) => r.status === "SUCCEEDED").length;
-            return (
-              <div key={key} className={`agent-tile as-${state}`}>
-                <div className="agent-tile-head">
-                  <span className="agent-avatar">{a.short}</span>
-                  <div>
-                    <b>{a.label}</b>
-                    <div className="muted small">{a.role}</div>
-                  </div>
-                </div>
-                <div className="agent-tile-state">
-                  <span className={`pill pill-${state === "ready" ? "completed" : state === "failed" ? "blocked" : state === "running" ? "running" : "pending"}`}>
-                    {state === "idle" ? "Idle — not run yet" : state === "ready" ? "Ready" : state === "running" ? "Running" : "Last run failed"}
-                  </span>
-                  {last && <span className="muted small">last {timeAgo(last.started_at)} · {ok}/{mine.length} runs ok</span>}
-                </div>
-              </div>
-            );
-          })}
+      <div className="grid-main">
+        <div>
+          <Card title="Pending human actions" actions={<Link to="/approvals">All ({approvals.data?.length ?? 0}) →</Link>}>
+            {approvals.data?.length === 0 && <Empty>Nothing needs you right now.</Empty>}
+            <div className="approval-grid single">
+              {approvals.data?.slice(0, 3).map((a) => <ApprovalCard key={a.id} item={a} onDone={reloadAll} />)}
+            </div>
+          </Card>
+          <Card title="Recent agent activity" actions={<Link to="/workflows">Workflows →</Link>}>
+            <TraceFeed events={(trace.data ?? []).slice(0, 12)} showContext compact />
+          </Card>
         </div>
-      </Card>
-
-      <div className="grid-2">
-        <Card title="Recent agent activity">
-          {runs.data?.length === 0 && <Empty>No agent has run yet. Open a lead and click “Run full pipeline”.</Empty>}
-          <ul className="activity-feed">
-            {runs.data?.slice(0, 10).map((r) => (
-              <li key={r.id}>
-                <span className={`feed-dot st-${r.status}`} aria-hidden />
-                <div>
-                  <div>
-                    <b>{AGENTS[r.agent_name]?.label ?? r.agent_name}</b>
-                    {r.lead_id && companyOf.get(r.lead_id) && <> · <Link to={`/leads/${r.lead_id}`}>{companyOf.get(r.lead_id)}</Link></>}
-                  </div>
-                  <div className="small">{summarizeRun(r)}</div>
-                  <div className="muted small">{timeAgo(r.started_at)}{r.latency_ms != null && ` · ${fmtDuration(r.latency_ms)}`} · {r.prompt_version}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </Card>
-        <div className="stack-lg">
-          <Card title="Waiting for human review" actions={<Link to="/emails">Open review queue →</Link>}>
-            {drafts.data && drafts.data.length === 0 && <Empty>No drafts waiting. Generate emails from qualified leads.</Empty>}
+        <div>
+          <Card title="Agent status" actions={<span className="muted small">from the agent trace</span>}>
+            <ul className="agent-status-list">
+              {STATUS_AGENTS.map((key) => {
+                const st = agentState((trace.data ?? []).filter((e) => e.agent === key));
+                return (
+                  <li key={key}>
+                    <span className={`status-dot sd-${st.tone}`} />
+                    <div>
+                      <b>{TRACE_AGENTS[key].label}</b>
+                      <div className="muted small">{st.last ? `${st.last.action} · ${timeAgo(st.last.completed_at ?? st.last.started_at)}` : "No activity yet"}</div>
+                    </div>
+                    <span className={`pill pill-${st.tone}`}>{st.label}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </Card>
+          <Card title="Recent goals">
+            {goals.data?.length === 0 && <Empty>No goals yet.</Empty>}
             <ul className="list">
-              {drafts.data?.slice(0, 6).map((e) => (
-                <li key={e.id}>
-                  <Link to={`/emails/${e.id}`}>{e.subject}</Link>
-                  <span className="muted small">{e.sequence_number === 0 ? "Initial" : `Follow-up ${e.sequence_number}`}</span>
-                </li>
+              {goals.data?.map((g) => (
+                <li key={g.id}><Link to={`/workflows/${g.id}`}>{g.goal}</Link><Badge value={g.state === "AWAITING_APPROVAL" ? "WAITING" : g.state} /></li>
               ))}
             </ul>
           </Card>
           <Card title="Campaigns" actions={<Link to="/campaigns">Manage →</Link>}>
-            {analytics.data?.campaigns.length === 0 && <Empty>No campaigns yet.</Empty>}
             <table>
               <tbody>
                 {analytics.data?.campaigns.map((c) => (
@@ -106,17 +109,39 @@ export default function Dashboard() {
           </Card>
         </div>
       </div>
-
-      <Card title="How GrowthOS works">
-        <ol className="flow-h">
-          <li><span className="kind-chip agent">AI</span><b>Research</b><span>Public evidence, sources cited, unknowns stay unknown</span></li>
-          <li><span className="kind-chip agent">AI</span><b>Qualify</b><span>Rates fit with evidence; fixed rules compute the score</span></li>
-          <li><span className="kind-chip agent">AI</span><b>Draft</b><span>Personalized only with verified research</span></li>
-          <li><span className="kind-chip human">Human</span><b>Review</b><span>Edit, approve or reject</span></li>
-          <li><span className="kind-chip rule">Rule</span><b>Safety gate</b><span>Opt-out, suppression, pause, limits, duplicates</span></li>
-          <li><span className="kind-chip agent">AI</span><b>Replies &amp; follow-ups</b><span>Any reply or opt-out stops the sequence</span></li>
-        </ol>
-      </Card>
     </>
+  );
+}
+
+function GoalLauncher({ campaigns }: { campaigns: Campaign[] }) {
+  const [goal, setGoal] = useState("Find high-quality customers for our business");
+  const [campaignId, setCampaignId] = useState("");
+  const action = useAction();
+  const navigate = useNavigate();
+  const selected = campaignId || campaigns.find((c) => c.status === "ACTIVE")?.id || "";
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const wf = await action.run("goal", () => api.post<WorkflowSummary>("/workflows/goal", { goal, campaign_id: selected }));
+    if (wf) navigate(`/workflows/${wf.id}`);
+  }
+
+  return (
+    <form className="card goal-launcher" onSubmit={submit}>
+      <div className="goal-label">
+        <span className="kind-chip agent">Orchestrator</span>
+        <b>Give GrowthOS a goal</b>
+        <span className="muted small">The Orchestrator plans it, runs the specialist agents on the campaign's prospects, and brings you only the decisions that need a human.</span>
+      </div>
+      <div className="goal-row">
+        <input value={goal} onChange={(e) => setGoal(e.target.value)} required />
+        <select value={selected} onChange={(e) => setCampaignId(e.target.value)} required>
+          {campaigns.length === 0 && <option value="">Create a campaign first</option>}
+          {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.leads} prospects)</option>)}
+        </select>
+        <button className="primary" disabled={!!action.busy || !selected}>{action.busy ? "Starting…" : "▶ Run"}</button>
+      </div>
+      <ErrorBanner error={action.error} />
+    </form>
   );
 }

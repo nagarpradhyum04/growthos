@@ -91,7 +91,7 @@ def triage(text: str, *, llm_intents: list[str] | None = None, classification: s
         intents.add("not_interested")
     if classification == "INTERESTED":
         intents.add("purchase_intent" if "purchase_intent" in intents else "meeting_request")
-    if classification == "UNKNOWN" and not intents - {"greeting", "thanks"}:
+    if classification == "UNKNOWN" and not intents:
         intents.add("low_confidence")
 
     ordered = sorted(intents, key=lambda i: (i not in RED, i not in YELLOW, i))
