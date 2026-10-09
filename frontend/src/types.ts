@@ -272,7 +272,7 @@ export interface WorkflowSummary {
   campaign_id: string | null;
   customer_id: string | null;
   plan: string[];
-  summary: Record<string, number>;
+  summary: Record<string, number | string>;
   error: string | null;
   created_at: string;
   updated_at: string;
@@ -282,6 +282,7 @@ export interface WorkflowSummary {
 
 export interface WorkflowDetail extends WorkflowSummary {
   events: TraceEvent[];
+  sub_events: TraceEvent[];
   children: WorkflowSummary[];
 }
 

@@ -116,7 +116,15 @@ def get_workflow(workflow_id: uuid.UUID, cu: CurrentUser = Depends(current_user)
     children = db.execute(select(Workflow, Lead.company_name).outerjoin(Lead, Lead.id == Workflow.lead_id)
                           .where(Workflow.parent_id == wf.id).order_by(Workflow.created_at)).all()
     company = db.get(Lead, wf.lead_id).company_name if wf.lead_id and db.get(Lead, wf.lead_id) else None
+    # Agents of a goal run work inside sub-workflows (one per lead, or one per stage of a full cycle), so the
+    # orchestration view needs their recorded events too (two levels down).
+    ids = [w.id for w, _ in children]
+    if ids:
+        ids += db.scalars(select(Workflow.id).where(Workflow.parent_id.in_(ids))).all()
+    sub_events = db.scalars(select(WorkflowEvent).where(WorkflowEvent.workflow_id.in_(ids))
+                            .order_by(WorkflowEvent.started_at, WorkflowEvent.created_at).limit(2000)).all() if ids else []
     return {**workflow_dict(wf, company), "events": [event_dict(e) for e in events],
+            "sub_events": [event_dict(e) for e in sub_events],
             "children": [workflow_dict(w, n) for w, n in children]}
 
 

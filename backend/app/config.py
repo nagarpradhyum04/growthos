@@ -73,7 +73,7 @@ class Settings(BaseSettings):
     def resolved_llm_model(self) -> str:
         if self.llm_model:
             return self.llm_model
-        return "mock-model" if self.llm_provider == "mock" else "gpt-4o-mini"
+        return {"mock": "mock-model", "gemini": "gemini-2.5-flash"}.get(self.llm_provider, "gpt-4o-mini")
 
 
 @lru_cache

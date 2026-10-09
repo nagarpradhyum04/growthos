@@ -128,3 +128,34 @@ def test_unknown_org_context_does_not_log(db):
     service = _service(ScriptedProvider(VALID), DbRunLogger(SessionLocal))
     _run(service, ctx=RunContext(organization_id=None))
     assert db.scalar(select(AgentRun)) is None
+
+
+def test_gemini_llm_provider_requests_json_and_parses_text():
+    import json as _json
+
+    import httpx
+
+    from app.services.llm.gemini_provider import GeminiLLMProvider
+    from app.services.llm.provider import LLMMessage, LLMRateLimitError, LLMRequest
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"], seen["body"] = str(request.url), _json.loads(request.content)
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": '{"ok": true}'}]}}],
+                                         "usageMetadata": {"promptTokenCount": 7, "candidatesTokenCount": 3}})
+
+    p = GeminiLLMProvider("k", 10, transport=httpx.MockTransport(handler))
+    out = p.complete_json(LLMRequest(agent_name="x", system_prompt="sys", model="gemini-2.5-flash",
+                                     messages=[LLMMessage("user", "hi")]))
+    assert out.content == '{"ok": true}' and out.usage == {"prompt_tokens": 7, "completion_tokens": 3}
+    assert seen["url"].endswith("models/gemini-2.5-flash:generateContent")
+    assert seen["body"]["generationConfig"]["responseMimeType"] == "application/json"
+    assert seen["body"]["systemInstruction"]["parts"][0]["text"] == "sys"
+
+    limited = GeminiLLMProvider("k", 10, transport=httpx.MockTransport(lambda r: httpx.Response(429, json={})))
+    try:
+        limited.complete_json(LLMRequest(agent_name="x", system_prompt="s", model="m", messages=[]))
+        raise AssertionError("expected rate limit")
+    except LLMRateLimitError:
+        pass

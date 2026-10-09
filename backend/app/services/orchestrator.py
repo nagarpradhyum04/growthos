@@ -8,11 +8,11 @@ behind can_send() and human approval.
 import time
 from dataclasses import asdict, dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.errors import AgentFailedError, GrowthOSError
-from app.models import Campaign, Email, Lead, Workflow
+from app.models import Campaign, Email, Lead, Workflow, WorkflowEvent
 from app.models.enums import (
     ApprovalType,
     LeadStatus,
@@ -204,8 +204,15 @@ class Orchestrator:
                    detail={"lead_ids": [str(l.id) for l in candidates]})
         db.commit()
         if not candidates:
-            wfs.record(db, wf, "orchestrator", "Finish", TraceStatus.COMPLETED,
-                       "Nothing to do: add prospects to the campaign first", state=WorkflowState.COMPLETED)
+            by_status = dict(db.execute(select(Lead.status, func.count(Lead.id))
+                                        .where(Lead.campaign_id == campaign.id).group_by(Lead.status)).all())
+            if by_status:
+                breakdown = ", ".join(f"{n} {st.value.lower().replace('_', ' ')}" for st, n in by_status.items())
+                why = (f"Nothing new to do: all {sum(by_status.values())} prospect(s) in “{campaign.name}” were already "
+                       f"processed ({breakdown}). Review drafts in Approvals, or import new prospects")
+            else:
+                why = f"Nothing to do: “{campaign.name}” has no prospects yet. Import prospects first"
+            wfs.record(db, wf, "orchestrator", "Finish", TraceStatus.COMPLETED, why, state=WorkflowState.COMPLETED)
             db.commit()
             return {"leads": 0}
 
@@ -259,7 +266,8 @@ class Orchestrator:
         handlers = {"acquire": lambda: self.run_goal(wf, max_leads), "followups": lambda: self._cmd_followups(wf),
                     "inbox": lambda: self._cmd_inbox(wf), "approvals": lambda: self._cmd_approvals(wf),
                     "lifecycle": lambda: self._cmd_lifecycle(wf), "insights": lambda: self._cmd_insights(wf),
-                    "social": lambda: self._cmd_social(wf, options or {})}
+                    "social": lambda: self._cmd_social(wf, options or {}),
+                    "full_cycle": lambda: self._cmd_full_cycle(wf, max_leads)}
         try:
             return handlers[wf.command or "acquire"]()
         except GrowthOSError as exc:
@@ -298,6 +306,17 @@ class Orchestrator:
                   f"{closed} sequence(s) completed" if out else "No follow-ups are due right now")
         if nxt:
             result += f". Next one is due {nxt:%Y-%m-%d %H:%M}"
+        elif not out:
+            from app.models import Email
+            from app.models.enums import SENT_LIKE_STATUSES
+
+            sent_count = self.db.scalar(select(func.count(Email.id)).where(
+                Email.organization_id == wf.organization_id, Email.status.in_(SENT_LIKE_STATUSES))) or 0
+            delay = self.container.settings.followup_delay_days
+            result = ("Nothing to follow up: no outreach email has been sent yet. Follow-ups are scheduled "
+                      f"{delay} day(s) after a sent email that gets no reply" if not sent_count else
+                      f"No follow-ups are due: {sent_count} sent email(s) either got a reply, were stopped by rules, "
+                      "or already finished their sequence")
         wfs.record(self.db, wf, "followup", "Process due follow-ups", TraceStatus.COMPLETED, result, detail=out)
         waiting = drafted > 0
         if waiting:
@@ -372,6 +391,52 @@ class Orchestrator:
         self._understood(wf, "analyze performance and store learnings in shared memory")
         out = analytics_service.generate_insights(self.db, wf.organization_id, self.container, workflow=wf)
         return self._finish(wf, {"insights_stored": len(out["stored_insights"])}, WorkflowState.COMPLETED)
+
+    FULL_CYCLE = ("acquire", "inbox", "followups", "lifecycle", "social", "insights", "approvals")
+
+    def _cmd_full_cycle(self, wf: Workflow, max_leads: int) -> dict:
+        """Run every command in order as child workflows. Each stage is recorded with its real outcome,
+        including "nothing to do" and why; a failing stage never stops the others."""
+        from app.models.enums import CampaignStatus, WorkflowType
+        from app.services.command_router import BY_KEY
+
+        self._understood(wf, "run every agent: " + " → ".join(BY_KEY[k].label for k in self.FULL_CYCLE))
+        results: dict[str, str] = {}
+        for key in self.FULL_CYCLE:
+            cmd = BY_KEY[key]
+            campaign_id = None
+            if cmd.needs_campaign:
+                campaign_id = wf.campaign_id or self.db.scalar(
+                    select(Campaign.id).where(Campaign.organization_id == wf.organization_id,
+                                              Campaign.status == CampaignStatus.ACTIVE)
+                    .order_by(Campaign.created_at.desc()))
+                if campaign_id is None:
+                    wfs.record(self.db, wf, "orchestrator", f"Stage: {cmd.label}", TraceStatus.SKIPPED,
+                               "Skipped: there is no active campaign with prospects. Create one under Campaigns")
+                    results[key] = "SKIPPED"
+                    self.db.commit()
+                    continue
+            child = wfs.start_workflow(self.db, wf.organization_id, WorkflowType.GOAL, goal=cmd.label, command=key,
+                                       plan=list(cmd.plan), parent_id=wf.id, campaign_id=campaign_id)
+            self.db.commit()
+            started = wfs.now()
+            self.run_command(child, max_leads)
+            self.db.refresh(child)
+            last = self.db.scalar(select(WorkflowEvent.result).where(WorkflowEvent.workflow_id == child.id)
+                                  .order_by(WorkflowEvent.created_at.desc()))
+            failed = child.state == WorkflowState.FAILED
+            wfs.record(self.db, wf, "orchestrator", f"Stage: {cmd.label}", TraceStatus.FAILED if failed else TraceStatus.COMPLETED,
+                       (child.error or last or child.state.value) if failed else (last or child.state.value),
+                       detail={"workflow_id": str(child.id), "state": child.state.value, "summary": child.summary},
+                       started_at=started)
+            results[key] = child.state.value
+            self.db.commit()
+        waiting = any(v in ("AWAITING_APPROVAL", "ESCALATED") for v in results.values())
+        if waiting:
+            wfs.record(self.db, wf, "human", "Decisions for you", TraceStatus.WAITING,
+                       "Some stages produced drafts or posts that wait for your approval")
+        return self._finish(wf, {k: v.lower().replace("_", " ") for k, v in results.items()},
+                            WorkflowState.AWAITING_APPROVAL if waiting else WorkflowState.COMPLETED)
 
     def _cmd_social(self, wf: Workflow, options: dict) -> dict:
         from datetime import date

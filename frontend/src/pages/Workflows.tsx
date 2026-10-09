@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { timeAgo } from "../components/agents";
-import { OrchestrationFlow, TraceFeed } from "../components/trace";
+import { OrchestrationFlow, TraceFeed, workflowStages } from "../components/trace";
 import { Badge, Card, Empty, ErrorBanner, Stat } from "../components/ui";
 import { useAsync } from "../components/useAsync";
 import type { WorkflowDetail, WorkflowSummary } from "../types";
@@ -12,13 +12,6 @@ const STATE_TONE: Record<string, string> = {
   COMPLETED: "good", AWAITING_APPROVAL: "warn", ESCALATED: "warn", BLOCKED: "bad", FAILED: "bad",
   WAITING_FOR_REPLY: "info",
 };
-
-// Social runs show only the stages in their plan (a media-only regeneration doesn't run the writer).
-function socialStages(plan: string[]) {
-  const map: Record<string, string> = { social_content: "social", safety: "safety", media: "media", human_review: "human" };
-  const stages = plan.map((p) => map[p]).filter(Boolean);
-  return plan.includes("social_content") ? ["orchestrator", ...stages] : stages;
-}
 
 export function StateBadge({ state }: { state: string }) {
   return <span className={`badge ${STATE_TONE[state] ?? "info"}`}>{state.replace(/_/g, " ")}</span>;
@@ -106,8 +99,8 @@ export function WorkflowView() {
         </div>
         {wf.lead_id && <Link className="button" to={`/leads/${wf.lead_id}`}>Open lead →</Link>}
       </div>
-      <OrchestrationFlow events={wf.events} state={wf.state} title="Orchestration — from goal to memory"
-        only={wf.command === "social" ? socialStages(wf.plan) : undefined} />
+      <OrchestrationFlow events={[...wf.events, ...(wf.sub_events ?? [])]} state={wf.state} title="Orchestration — agents in this run"
+        only={workflowStages(wf, [...wf.events, ...(wf.sub_events ?? [])])} />
       {wf.command === "social" && Object.keys(s).length > 0 && (
         <div className="stats">
           <Stat label="Week of" value={s.week_start ? new Date(`${s.week_start}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—"} />
@@ -132,11 +125,11 @@ export function WorkflowView() {
         </Card>
         <div>
           {wf.children.length > 0 && (
-            <Card title="Lead workflows" actions={<Link to="/approvals">Pending approvals →</Link>}>
+            <Card title={wf.command === "full_cycle" ? "Stages" : "Lead workflows"} actions={<Link to="/approvals">Pending approvals →</Link>}>
               <ul className="list">
                 {wf.children.map((c) => (
                   <li key={c.id}>
-                    <Link to={`/workflows/${c.id}`}>{c.company_name}</Link>
+                    <Link to={`/workflows/${c.id}`}>{c.company_name ?? c.goal}</Link>
                     <StateBadge state={c.state} />
                   </li>
                 ))}

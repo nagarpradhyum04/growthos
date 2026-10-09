@@ -20,6 +20,16 @@ class Command:
 
 
 COMMANDS: list[Command] = [
+    Command("full_cycle", "Run the full growth cycle",
+            "Every agent in order: find & qualify customers (Research, Qualification, Outreach, Safety), triage the inbox "
+            "(Email Intelligence), follow-ups, customer check-ins, this week's social posts (Social Content, Nano Banana / "
+            "Veo), then Analytics learns from the results. Each stage reports what it did or why there was nothing to do.",
+            ("research", "qualification", "outreach", "safety", "email_intelligence", "followup", "social_content",
+             "media", "analytics", "store_memory", "human_review"),
+            phrases=("full cycle", "full growth cycle", "run everything", "run all", "all agents", "every agent",
+                     "all the agents", "whole pipeline", "full pipeline"),
+            words=("autopilot", "everything"),
+            examples=("Run the full growth cycle with all agents",)),
     Command("acquire", "Find & qualify new customers",
             "Research, qualify and draft personalized outreach for the campaign's prospects; drafts wait for your approval.",
             ("understand_goal", "select_candidates", "research", "qualification", "outreach", "safety", "human_review", "summarize"),

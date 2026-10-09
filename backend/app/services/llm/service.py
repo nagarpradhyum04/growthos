@@ -202,6 +202,10 @@ def build_provider(settings: Settings) -> LLMProvider:
         from app.services.llm.openai_provider import OpenAIProvider
 
         return OpenAIProvider(settings.openai_api_key, settings.llm_timeout_seconds)
+    if settings.llm_provider == "gemini":
+        from app.services.llm.gemini_provider import GeminiLLMProvider
+
+        return GeminiLLMProvider(settings.gemini_api_key or "", settings.llm_timeout_seconds)
     if settings.llm_provider == "mock":
         from app.services.llm.mock_provider import MockLLMProvider
 

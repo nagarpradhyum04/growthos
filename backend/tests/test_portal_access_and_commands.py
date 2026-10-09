@@ -90,7 +90,7 @@ def test_opted_out_customer_is_denied(client, auth, campaign, lead):
 # ---------------- Orchestrator commands ----------------
 def test_commands_are_listed_and_routed(client, auth):
     cmds = client.get("/workflows/commands", headers=auth).json()
-    assert {c["key"] for c in cmds} == {"acquire", "followups", "inbox", "approvals", "lifecycle", "social", "insights"}
+    assert {c["key"] for c in cmds} == {"full_cycle", "acquire", "followups", "inbox", "approvals", "lifecycle", "social", "insights"}
     assert all(c["examples"] for c in cmds)
     r = client.get("/workflows/route", headers=auth, params={"text": "Follow up with leads who haven't replied"}).json()
     assert r["command"]["key"] == "followups" and "follow up" in r["matched"]
@@ -201,3 +201,35 @@ def test_unexpected_errors_carry_a_reference(client):
 
     r = client.get("/__boom_test")
     assert r.status_code == 500 and r.json()["error"]["details"]["ref"] in r.json()["error"]["message"]
+
+
+def test_full_growth_cycle_runs_every_stage_and_reports_each(client, auth, lead):
+    from app.services.command_router import route
+
+    assert route("Run the full growth cycle with all agents").command.key == "full_cycle"
+    assert route("run everything").command.key == "full_cycle"
+    wf = client.post("/workflows/goal?run_now=true", json={"goal": "Run the full growth cycle with all agents"},
+                     headers=auth).json()
+    detail = client.get(f"/workflows/{wf['id']}", headers=auth).json()
+    stages = [e for e in detail["events"] if e["action"].startswith("Stage: ")]
+    assert [e["action"] for e in stages] == [
+        "Stage: Find & qualify new customers", "Stage: Triage the inbox", "Stage: Follow up with silent leads",
+        "Stage: Check in with existing customers", "Stage: Create this week's social posts",
+        "Stage: Analyze performance & learn", "Stage: Brief me on pending decisions"]
+    assert all(e["result"] for e in stages)  # every stage says what happened (or why nothing did)
+    assert len(detail["children"]) == 7
+    # the agents that worked inside sub-workflows are visible to the orchestration view
+    agents = {e["agent"] for e in detail["sub_events"]}
+    assert {"research", "qualification", "outreach", "safety", "social", "media", "analytics"} <= agents
+    assert detail["state"] == "AWAITING_APPROVAL"  # drafts and social posts wait for a human
+
+
+def test_full_cycle_without_campaign_skips_acquisition_with_a_reason(client):
+    headers = register(client, email="solo@biz.example", org="Solo")
+    from tests.conftest import BUSINESS_PROFILE
+
+    client.put("/business-profile", json=BUSINESS_PROFILE, headers=headers)
+    wf = client.post("/workflows/goal?run_now=true", json={"goal": "run everything"}, headers=headers).json()
+    events = client.get(f"/workflows/{wf['id']}", headers=headers).json()["events"]
+    skipped = next(e for e in events if e["action"] == "Stage: Find & qualify new customers")
+    assert skipped["status"] == "SKIPPED" and "no active campaign" in skipped["result"]

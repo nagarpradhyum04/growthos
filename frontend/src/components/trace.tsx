@@ -81,7 +81,37 @@ const FLOW: { key: string; label: string; agents: string[]; kind: string; match?
   { key: "memory", label: "Memory", agents: ["memory"], kind: "system" },
   { key: "social", label: "Social Content", agents: ["social"], kind: "agent" },
   { key: "media", label: "Media (Nano Banana / Veo)", agents: ["media"], kind: "agent" },
+  { key: "support", label: "Product Support AI", agents: ["support"], kind: "agent" },
+  { key: "warranty", label: "Warranty check", agents: ["warranty"], kind: "rule" },
+  { key: "access", label: "Access Agent", agents: ["access"], kind: "rule" },
 ];
+
+// Which stages a workflow actually involves. A command runs only the agents in its plan, so agents
+// outside the plan are not shown (they are not "pending" — they were never part of this run).
+const PLAN_STAGE: Record<string, string> = {
+  research: "research", qualification: "qualification", outreach: "outreach", safety: "safety",
+  human_review: "human", escalate: "human", followup: "followup", email_intelligence: "email_intelligence",
+  analytics: "analytics", store_memory: "memory", social_content: "social", media: "media",
+};
+const TYPE_STAGES: Record<string, string[]> = {
+  LEAD: ["orchestrator", "research", "qualification", "outreach", "safety", "human", "send", "email_intelligence", "followup", "memory"],
+  INBOUND: ["email_intelligence", "support", "warranty", "safety", "human"],
+  LIFECYCLE: ["safety", "followup"],
+};
+
+export function workflowStages(wf: { type: string; command: string | null; plan: string[] }, events: TraceEvent[]): string[] {
+  let base: string[];
+  if (wf.command) {
+    const fromPlan = wf.plan.map((p) => PLAN_STAGE[p]).filter(Boolean);
+    base = wf.plan.includes("media") && !wf.plan.includes("social_content") ? fromPlan : ["orchestrator", ...fromPlan];
+  } else {
+    base = TYPE_STAGES[wf.type] ?? FLOW.map((f) => f.key);
+  }
+  // Never hide real activity: add any stage that recorded events even if the plan didn't list it.
+  const extra = FLOW.filter((f) => !base.includes(f.key) && events.some((e) => f.agents.includes(e.agent) && (!f.match || f.match(e))))
+    .map((f) => f.key);
+  return [...new Set([...base, ...extra])];
+}
 
 const STATE_STAGE: Record<string, string> = {
   PENDING: "orchestrator", RESEARCHING: "research", QUALIFYING: "qualification", DRAFTING: "outreach",
@@ -99,6 +129,9 @@ export function OrchestrationFlow({ events, state, title = "Orchestration workfl
   events: TraceEvent[]; state?: string; title?: string; only?: string[];
 }) {
   const current = state ? STATE_STAGE[state] : undefined;
+  // A finished run never reached its remaining steps (e.g. nothing was due), so they were not needed.
+  // Also true while only waiting on a human: no more agents will run in this workflow.
+  const finished = !!state && ["COMPLETED", "BLOCKED", "FAILED", "AWAITING_APPROVAL", "ESCALATED"].includes(state);
   const ordered = only ? only.map((k) => FLOW.find((s) => s.key === k)).filter((s): s is (typeof FLOW)[number] => !!s) : FLOW;
   const stages = ordered.map((s) => {
     const mine = events.filter((e) => s.agents.includes(e.agent) && (!s.match || s.match(e)));
@@ -107,7 +140,7 @@ export function OrchestrationFlow({ events, state, title = "Orchestration workfl
     if (s.key === current && st !== "blocked" && st !== "failed" && state && !["COMPLETED", "BLOCKED", "FAILED"].includes(state)) {
       st = st === "completed" && ["SENT"].includes(state) ? "completed" : st === "pending" ? "running" : st;
     }
-    return { ...s, st, result: last?.result ?? "Not started", count: mine.length };
+    return { ...s, st, result: last?.result ?? (finished ? "Not needed in this run" : "Not started"), count: mine.length };
   });
   return (
     <section className="card">
@@ -125,7 +158,7 @@ export function OrchestrationFlow({ events, state, title = "Orchestration workfl
             <div className={`wf-node wf-${s.st === "failed" ? "blocked" : s.st === "running" ? "running" : s.st} kind-${s.kind === "system" ? "rule" : s.kind} ${s.key === current ? "wf-current" : ""}`} title={s.result}>
               <div className="wf-kind">{s.kind === "agent" ? "AI agent" : s.kind === "human" ? "Human" : s.kind === "rule" ? "Rule" : "Core"}</div>
               <div className="wf-name">{s.label}</div>
-              <div className="wf-state">{s.st === "pending" ? "Pending" : s.st[0].toUpperCase() + s.st.slice(1)}{s.key === current ? " · now" : ""}</div>
+              <div className="wf-state">{s.st === "pending" ? (finished ? "Not needed" : "Pending") : s.st[0].toUpperCase() + s.st.slice(1)}{s.key === current ? " · now" : ""}</div>
             </div>
             {i < stages.length - 1 && <div className={`wf-arrow ${s.st === "completed" ? "done" : ""}`} aria-hidden>→</div>}
           </div>
