@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { timeAgo } from "../components/agents";
 import { OrchestrationFlow, TraceFeed, workflowStages } from "../components/trace";
 import { Badge, Card, Empty, ErrorBanner, Stat } from "../components/ui";
 import { useAsync } from "../components/useAsync";
-import type { WorkflowDetail, WorkflowSummary } from "../types";
+import type { ApprovalItem, SystemStatus, WorkflowDetail, WorkflowSummary } from "../types";
 
 const TERMINAL = ["COMPLETED", "BLOCKED", "FAILED"];
 const STATE_TONE: Record<string, string> = {
@@ -119,6 +119,7 @@ export function WorkflowView() {
           <Stat label="Awaiting you" value={s.awaiting_approval ?? 0} hint="human approvals" />
         </div>
       )}
+      <DraftsToSend wf={wf} />
       <div className="grid-main">
         <Card title="Agent trace" actions={<span className="muted small">{wf.events.length} recorded events</span>}>
           <TraceFeed events={wf.events} />
@@ -145,5 +146,64 @@ export function WorkflowView() {
         </div>
       </div>
     </>
+  );
+}
+
+/** Emails the Outreach Agent drafted in this run. First-touch emails always need the owner's approval;
+ * approving here sends through the same backend path (can_send() still checks every rule). */
+function DraftsToSend({ wf }: { wf: WorkflowDetail }) {
+  const leadIds = new Set([...wf.children.map((c) => c.lead_id), ...(wf.sub_events ?? []).map((e) => e.lead_id), wf.lead_id]
+    .filter((x): x is string => !!x));
+  const approvals = useAsync(() => api.get<ApprovalItem[]>("/approvals?status=PENDING"), [wf.id, wf.state]);
+  const status = useAsync(() => api.get<SystemStatus>("/system/status"));
+  const [busy, setBusy] = useState(false);
+  const [results, setResults] = useState<Record<string, string>>({});
+  if (!leadIds.size) return null;
+  const drafts = (approvals.data ?? []).filter((a) => a.type === "OUTBOUND_EMAIL" && a.lead_id && leadIds.has(a.lead_id));
+  const sentHere = Object.values(results).filter((r) => r === "Sent").length;
+  if (!drafts.length && !sentHere) return null;
+
+  async function send(items: ApprovalItem[]) {
+    setBusy(true);
+    for (const a of items) {
+      try {
+        await api.post(`/approvals/${a.id}/approve`, { send: true, note: "Approved from the run summary" });
+        setResults((r) => ({ ...r, [a.id]: "Sent" }));
+      } catch (err) {
+        setResults((r) => ({ ...r, [a.id]: describeError(err) }));
+      }
+    }
+    setBusy(false);
+    approvals.reload();
+  }
+
+  const mock = status.data?.providers.email === "mock";
+  return (
+    <Card title={`Emails ready to send (${drafts.length})`} actions={drafts.length > 1 ? (
+      <button className="primary" disabled={busy} onClick={() => {
+        if (window.confirm(`Send ${drafts.length} first-touch emails now? Each one still passes the safety checks.`)) void send(drafts);
+      }}>Approve &amp; send all ({drafts.length})</button>) : undefined}>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        The Outreach Agent wrote these and the Safety Agent passed them. First emails to new prospects are never sent without
+        your approval. Read each one (or edit it) before sending.
+        {mock && <> <b>Email is in mock mode:</b> “sent” emails are recorded but not delivered. Set <code>EMAIL_PROVIDER=resend</code> to deliver real email.</>}
+      </p>
+      <ErrorBanner error={approvals.error} />
+      <table>
+        <tbody>
+          {drafts.map((a) => (
+            <tr key={a.id}>
+              <td><b>{a.company_name}</b><div className="muted small">{String(a.subject.subject ?? "")}</div></td>
+              <td className="small">{results[a.id] && <span className="banner error small">{results[a.id]}</span>}</td>
+              <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                {typeof a.subject.id === "string" && <Link className="button" to={`/emails/${a.subject.id}`}>Review / edit</Link>}{" "}
+                <button className="primary" disabled={busy} onClick={() => void send([a])}>Approve &amp; send</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {sentHere > 0 && <p className="banner ok small"><span>{sentHere} email(s) sent{mock ? " (mock — not delivered)" : ""}. Replies and follow-ups are tracked automatically.</span></p>}
+    </Card>
   );
 }

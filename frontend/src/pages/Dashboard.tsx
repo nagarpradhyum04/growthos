@@ -215,7 +215,11 @@ function GoalLauncher({ campaigns, onLaunched }: { campaigns: Campaign[]; onLaun
           {launched.map((w) => (
             <li key={w.id}>
               <span><b>{w.goal}</b> <span className="muted small">· {commands.data?.find((c) => c.key === w.command)?.label ?? w.command}</span></span>
-              <span className="actions"><Badge value={w.state === "AWAITING_APPROVAL" ? "WAITING" : w.state} /><Link to={`/workflows/${w.id}`}>Trace →</Link></span>
+              <span className="actions">
+                {Number(w.summary?.awaiting_approval ?? 0) > 0 && (
+                  <Link to={`/workflows/${w.id}`}><b>{String(w.summary.awaiting_approval)} email(s) ready to send →</b></Link>
+                )}
+                <Badge value={w.state === "AWAITING_APPROVAL" ? "WAITING" : w.state} /><Link to={`/workflows/${w.id}`}>Trace →</Link></span>
             </li>
           ))}
         </ul>
