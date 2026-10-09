@@ -287,7 +287,7 @@ export interface WorkflowDetail extends WorkflowSummary {
 
 export interface ApprovalItem {
   id: string;
-  type: "OUTBOUND_EMAIL" | "REPLY_ESCALATION" | "MESSAGE_ESCALATION" | "WARRANTY_CLAIM" | "SERVICE_REQUEST";
+  type: "OUTBOUND_EMAIL" | "REPLY_ESCALATION" | "MESSAGE_ESCALATION" | "WARRANTY_CLAIM" | "SERVICE_REQUEST" | "SOCIAL_POST";
   status: string;
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT";
   tier: "GREEN" | "YELLOW" | "RED" | null;
@@ -333,7 +333,53 @@ export interface Policy {
   lifecycle_enabled: boolean;
   lifecycle_rules: Record<string, number>;
   lifecycle_max_per_7d: number;
+  social_weekly_enabled: boolean;
+  social_platforms: string[];
   locked_categories: string[];
+}
+
+// ---------------- Social ----------------
+export interface SocialPost {
+  id: string;
+  week_start: string;
+  kind: "image" | "video";
+  status: "GENERATING" | "READY" | "NEEDS_REVIEW" | "FAILED" | "APPROVED" | "REJECTED";
+  theme: string;
+  headline: string;
+  caption: string;
+  hashtags: string[];
+  platforms: string[];
+  media_prompt: string;
+  has_media: boolean;
+  media_mime: string | null;
+  media_provider: string;
+  media_model: string;
+  is_mock_media: boolean;
+  policy_notes: string[];
+  error: string | null;
+  agent_run_id: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SocialOverview {
+  current_week: string;
+  weekly_enabled: boolean;
+  platforms: string[];
+  media_provider: string;
+  image_model: string;
+  video_model: string;
+}
+
+export interface SystemStatus {
+  workflows_running: number;
+  agents_active_10m: string[];
+  pending_approvals: number;
+  memory_entries: number;
+  blocked_by_policy_7d: number;
+  jobs_waiting_for_worker: number;
+  providers: { llm: string; email: string; media: string };
 }
 
 // ---------------- Customers ----------------

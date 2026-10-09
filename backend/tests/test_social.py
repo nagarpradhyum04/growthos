@@ -219,3 +219,14 @@ def test_media_failure_is_reported_not_faked(client, auth, container):
     posts = _generate(client, auth)
     assert all(p["status"] == "FAILED" and not p["has_media"] and "quota" in p["error"] for p in posts)
     assert not [a for a in client.get("/approvals", headers=auth).json() if a["type"] == "SOCIAL_POST"]
+
+
+def test_system_status_counts_real_state(client, auth):
+    before = client.get("/system/status", headers=auth).json()
+    assert before["workflows_running"] == 0 and before["pending_approvals"] == 0
+    assert before["providers"] == {"llm": "mock", "email": "mock", "media": "mock"}
+    _generate(client, auth)
+    after = client.get("/system/status", headers=auth).json()
+    assert after["pending_approvals"] == 2
+    assert {"social", "media"} <= set(after["agents_active_10m"])
+    assert after["memory_entries"] >= 1

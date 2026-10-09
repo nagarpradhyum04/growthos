@@ -51,3 +51,40 @@ def retry_followup(followup_id: uuid.UUID, cu: CurrentUser = Depends(current_use
     followup.cancel_reason = None
     db.commit()
     return followup
+
+
+@router.get("/system/status")
+def system_status(cu: CurrentUser = Depends(current_user), db: Session = Depends(get_db),
+                  c: Container = Depends(container)):
+    """Live status for the top bar. Every value is counted from the database or read from configuration."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import func
+
+    from app.models import Approval, MemoryEntry, Workflow, WorkflowEvent
+    from app.models.enums import ApprovalStatus, JobStatus, TraceStatus, WorkflowState
+
+    now = datetime.now(timezone.utc)
+    working = {WorkflowState.PENDING, WorkflowState.RESEARCHING, WorkflowState.QUALIFYING, WorkflowState.DRAFTING,
+               WorkflowState.SAFETY_CHECK}
+    org = cu.org_id
+    count = lambda stmt: db.scalar(stmt) or 0  # noqa: E731
+    running = count(select(func.count(Workflow.id)).where(Workflow.organization_id == org, Workflow.state.in_(working),
+                                                          Workflow.updated_at >= now - timedelta(minutes=30)))
+    agents_active = db.scalars(select(WorkflowEvent.agent).where(
+        WorkflowEvent.organization_id == org, WorkflowEvent.completed_at >= now - timedelta(minutes=10)).distinct()).all()
+    stuck = count(select(func.count(Job.id)).where(Job.organization_id == org, Job.status == JobStatus.QUEUED,
+                                                   Job.run_at < now - timedelta(minutes=2)))
+    s = c.settings
+    return {
+        "workflows_running": running,
+        "agents_active_10m": sorted(agents_active),
+        "pending_approvals": count(select(func.count(Approval.id)).where(Approval.organization_id == org,
+                                                                         Approval.status == ApprovalStatus.PENDING)),
+        "memory_entries": count(select(func.count(MemoryEntry.id)).where(MemoryEntry.organization_id == org)),
+        "blocked_by_policy_7d": count(select(func.count(WorkflowEvent.id)).where(
+            WorkflowEvent.organization_id == org, WorkflowEvent.status == TraceStatus.BLOCKED,
+            WorkflowEvent.completed_at >= now - timedelta(days=7))),
+        "jobs_waiting_for_worker": stuck,
+        "providers": {"llm": s.llm_provider, "email": s.email_provider, "media": s.media_provider},
+    }

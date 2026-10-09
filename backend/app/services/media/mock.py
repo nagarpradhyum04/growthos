@@ -23,7 +23,13 @@ def _size(aspect: str, base: int = 1080) -> tuple[int, int]:
         w, h = (int(x) for x in aspect.split(":"))
     except ValueError:
         w, h = 1, 1
-    return (base, int(base * h / w)) if w >= h else (int(base * w / h), base) if False else (base * w // max(w, h), base * h // max(w, h))
+    w, h = max(w, 1), max(h, 1)
+    return base * w // max(w, h), base * h // max(w, h)
+
+
+def _chars(width: int, font_size: int) -> int:
+    """Roughly how many characters fit on one line (serif glyphs are ~0.55em wide)."""
+    return max(8, int(width / (font_size * 0.55)))
 
 
 class MockMediaProvider(MediaProvider):
@@ -31,7 +37,7 @@ class MockMediaProvider(MediaProvider):
 
     def generate_image(self, prompt: str, *, aspect_ratio: str, brand: dict) -> MediaResult:
         w, h = _size(aspect_ratio)
-        headline = _wrap(brand.get("headline") or brand.get("company", ""), 22, 4)
+        headline = _wrap(brand.get("headline") or brand.get("company", ""), _chars(w - 160, 80), 4)
         company = html.escape(brand.get("company", ""))
         tspans = "".join(f'<tspan x="80" dy="{0 if i == 0 else 92}">{line}</tspan>' for i, line in enumerate(headline))
         svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">
@@ -41,7 +47,8 @@ class MockMediaProvider(MediaProvider):
 <text x="80" y="140" font-family="monospace" font-size="26" letter-spacing="6" fill="{PALETTE[0]}">{company.upper()}</text>
 <text x="80" y="{h // 2 - 60}" font-family="Georgia, serif" font-size="80" font-weight="700" fill="{PALETTE[0]}">{tspans}</text>
 <rect x="0" y="{h - 110}" width="{w}" height="110" fill="{PALETTE[0]}"/>
-<text x="80" y="{h - 48}" font-family="monospace" font-size="24" letter-spacing="3" fill="{PALETTE[1]}">MOCK PREVIEW · SET MEDIA_PROVIDER=gemini FOR NANO BANANA</text>
+<text x="80" y="{h - 66}" font-family="monospace" font-size="22" letter-spacing="3" fill="{PALETTE[1]}">MOCK PREVIEW</text>
+<text x="80" y="{h - 34}" font-family="monospace" font-size="18" letter-spacing="2" fill="{PALETTE[2]}">SET MEDIA_PROVIDER=gemini FOR NANO BANANA</text>
 </svg>"""
         return MediaResult(svg.encode(), "image/svg+xml", self.name, "mock-image")
 
@@ -53,7 +60,7 @@ class MockMediaProvider(MediaProvider):
         frames = []
         for i, scene in enumerate(scenes):
             lines = "".join(f'<tspan x="70" dy="{0 if j == 0 else 62}">{t}</tspan>'
-                            for j, t in enumerate(_wrap(scene, 26, 6)))
+                            for j, t in enumerate(_wrap(scene, _chars(w - 140, 54), 7)))
             # Each scene is visible for its 3-second slot of the loop.
             start, end = i / n, (i + 1) / n
             frames.append(f"""<g opacity="0"><animate attributeName="opacity" dur="{dur}s" repeatCount="indefinite"
@@ -66,6 +73,8 @@ class MockMediaProvider(MediaProvider):
 {''.join(frames)}
 <rect x="70" y="{h - 160}" width="{w - 140}" height="6" fill="#3a3834"/>
 <rect x="70" y="{h - 160}" width="0" height="6" fill="{PALETTE[2]}"><animate attributeName="width" from="0" to="{w - 140}" dur="{dur}s" repeatCount="indefinite"/></rect>
-<text x="70" y="{h - 90}" font-family="monospace" font-size="22" letter-spacing="2" fill="{PALETTE[1]}">MOCK STORYBOARD · SET MEDIA_PROVIDER=gemini FOR A REAL VEO VIDEO</text>
+<text x="70" y="{h - 100}" font-family="monospace" font-size="22" letter-spacing="2" fill="{PALETTE[1]}">MOCK STORYBOARD</text>
+<text x="70" y="{h - 66}" font-family="monospace" font-size="16" letter-spacing="1" fill="{PALETTE[2]}">SET MEDIA_PROVIDER=gemini</text>
+<text x="70" y="{h - 42}" font-family="monospace" font-size="16" letter-spacing="1" fill="{PALETTE[2]}">FOR A REAL VEO VIDEO</text>
 </svg>"""
         return MediaResult(svg.encode(), "image/svg+xml", self.name, "mock-storyboard")

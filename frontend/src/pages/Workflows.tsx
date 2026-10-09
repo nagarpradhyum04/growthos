@@ -13,6 +13,13 @@ const STATE_TONE: Record<string, string> = {
   WAITING_FOR_REPLY: "info",
 };
 
+// Social runs show only the stages in their plan (a media-only regeneration doesn't run the writer).
+function socialStages(plan: string[]) {
+  const map: Record<string, string> = { social_content: "social", safety: "safety", media: "media", human_review: "human" };
+  const stages = plan.map((p) => map[p]).filter(Boolean);
+  return plan.includes("social_content") ? ["orchestrator", ...stages] : stages;
+}
+
 export function StateBadge({ state }: { state: string }) {
   return <span className={`badge ${STATE_TONE[state] ?? "info"}`}>{state.replace(/_/g, " ")}</span>;
 }
@@ -99,8 +106,17 @@ export function WorkflowView() {
         </div>
         {wf.lead_id && <Link className="button" to={`/leads/${wf.lead_id}`}>Open lead →</Link>}
       </div>
-      <OrchestrationFlow events={wf.events} state={wf.state} title="Orchestration — from goal to memory" />
-      {wf.type === "GOAL" && Object.keys(s).length > 0 && (
+      <OrchestrationFlow events={wf.events} state={wf.state} title="Orchestration — from goal to memory"
+        only={wf.command === "social" ? socialStages(wf.plan) : undefined} />
+      {wf.command === "social" && Object.keys(s).length > 0 && (
+        <div className="stats">
+          <Stat label="Week of" value={s.week_start ? new Date(`${s.week_start}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short" }) : "—"} />
+          <Stat label="Posts ready" value={s.generated ?? 0} hint="waiting for your approval" />
+          <Stat label="Flagged by rules" value={s.flagged ?? 0} />
+          <Stat label="Media failed" value={s.failed ?? 0} />
+        </div>
+      )}
+      {wf.type === "GOAL" && (!wf.command || wf.command === "acquire") && Object.keys(s).length > 0 && (
         <div className="stats">
           <Stat label="Prospects" value={s.leads ?? 0} />
           <Stat label="Researched" value={s.researched ?? 0} />

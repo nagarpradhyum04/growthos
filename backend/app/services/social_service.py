@@ -102,9 +102,10 @@ def _get_or_create(db: Session, organization_id, week: date, kind: str) -> Socia
 def _store_media(container: Container, post: SocialPost, data: bytes, mime: str) -> None:
     ext = _EXT.get(mime, "bin")
     directory = media_dir(container)
-    for old in directory.glob(f"{post.id}.*"):
+    for old in directory.glob(f"{post.id}*"):
         old.unlink(missing_ok=True)
-    path = directory / f"{post.id}.{ext}"
+    # A fresh name per render so caches (and updated_at) change when the media is regenerated.
+    path = directory / f"{post.id}-{uuid.uuid4().hex[:8]}.{ext}"
     path.write_bytes(data)
     post.media_path = path.name  # relative to MEDIA_DIR; never a client-supplied path
     post.media_mime = mime
@@ -131,7 +132,7 @@ def _render_media(db: Session, container: Container, wf: Workflow, post: SocialP
     _store_media(container, post, result.data, result.mime)
     post.media_provider, post.media_model, post.error = result.provider, result.model, None
     wfs.record(db, wf, "media", action, TraceStatus.COMPLETED,
-               f"{post.kind.title()} created with {result.model} ({len(result.data) // 1024} KB, {result.mime})",
+               f"{post.kind.title()} created with {result.model} ({len(result.data) / 1024:.1f} KB, {result.mime})",
                started_at=started, detail={"provider": result.provider, "model": result.model})
     return True
 

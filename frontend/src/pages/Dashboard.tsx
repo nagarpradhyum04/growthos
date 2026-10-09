@@ -5,10 +5,10 @@ import { timeAgo } from "../components/agents";
 import { ApprovalCard, TRACE_AGENTS, TraceFeed } from "../components/trace";
 import { Badge, Card, Empty, ErrorBanner, Stat, pct } from "../components/ui";
 import { useAction, useAsync } from "../components/useAsync";
-import type { Analytics, ApprovalItem, Campaign, TraceEvent, WorkflowSummary } from "../types";
+import type { Analytics, ApprovalItem, Campaign, SocialPost, SystemStatus, TraceEvent, WorkflowSummary } from "../types";
 
 const STATUS_AGENTS = ["orchestrator", "research", "qualification", "outreach", "safety", "email_intelligence",
-  "followup", "analytics", "support", "access", "memory"];
+  "followup", "analytics", "support", "social", "media", "access", "memory"];
 
 function agentState(events: TraceEvent[]): { label: string; tone: string; last?: TraceEvent } {
   const last = events[0];
@@ -26,6 +26,8 @@ export default function Dashboard() {
   const approvals = useAsync(() => api.get<ApprovalItem[]>("/approvals?status=PENDING"));
   const campaigns = useAsync(() => api.get<Campaign[]>("/campaigns"));
   const goals = useAsync(() => api.get<WorkflowSummary[]>("/workflows?workflow_type=GOAL&top_level=true&limit=5"));
+  const status = useAsync(() => api.get<SystemStatus>("/system/status"));
+  const social = useAsync(() => api.get<SocialPost[]>("/social/posts?weeks=1"));
   const m = analytics.data?.overall;
   const lc = analytics.data?.lifecycle;
 
@@ -34,6 +36,8 @@ export default function Dashboard() {
     trace.reload();
     analytics.reload();
     goals.reload();
+    status.reload();
+    social.reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -47,16 +51,18 @@ export default function Dashboard() {
 
       {m && lc && (
         <div className="stats">
-          <Stat label="Total leads" value={m.leads_total} />
           <Stat label="Qualified leads" value={m.leads_qualified} hint={`${m.leads_disqualified} not contacted`} />
+          <Stat label="Total pipeline leads" value={m.leads_total} />
           <Stat label="Active campaigns" value={m.active_campaigns} />
-          <Stat label="Pending approvals" value={m.pending_approvals} hint="need your decision" />
+          <Stat label="Pending approvals" value={m.pending_approvals} hint="human decision required" />
           <Stat label="Customers" value={lc.customers} hint={`${m.conversions} converted from outreach`} />
           <Stat label="Open opportunities" value={m.open_opportunities} hint="YELLOW escalations" />
           <Stat label="Reply rate" value={pct(m.reply_rate_pct)} hint={`${m.emails_sent} emails sent`} />
           <Stat label="Conversion rate" value={pct(m.leads_total ? Math.round((m.conversions / m.leads_total) * 1000) / 10 : null)} hint="leads → customers" />
         </div>
       )}
+
+      <Spotlight status={status.data} trace={trace.data ?? []} pending={approvals.data?.length ?? null} />
 
       <div className="grid-main">
         <div>
@@ -86,6 +92,14 @@ export default function Dashboard() {
                   </li>
                 );
               })}
+            </ul>
+          </Card>
+          <Card title="This week on social" actions={<Link to="/social">Social Studio →</Link>}>
+            {social.data?.length === 0 && <Empty>No posts for this week yet. Run “Create this week's social media posts”.</Empty>}
+            <ul className="list">
+              {social.data?.map((p) => (
+                <li key={p.id}><span><b>{p.kind === "image" ? "Static post" : "Video post"}</b> <span className="muted small">· {p.theme || "—"}</span></span><Badge value={p.status} /></li>
+              ))}
             </ul>
           </Card>
           <Card title="Recent commands">
@@ -166,7 +180,7 @@ function GoalLauncher({ campaigns, onLaunched }: { campaigns: Campaign[]; onLaun
   return (
     <section className="card goal-launcher">
       <div className="goal-label">
-        <span className="kind-chip agent">Orchestrator</span>
+        <span className="eyebrow">Orchestrator</span>
         <b>Tell GrowthOS what to do</b>
         <span className="muted small">Type a command or pick a suggestion. The Orchestrator maps it to a known workflow (no guessing), runs the agents, and brings you only the decisions that need a human. You can run several commands at once.</span>
       </div>
@@ -206,6 +220,35 @@ function GoalLauncher({ campaigns, onLaunched }: { campaigns: Campaign[]; onLaun
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Terminal-style summary built only from /system/status and the recorded trace (no invented states). */
+function Spotlight({ status, trace, pending }: { status: SystemStatus | null; trace: TraceEvent[]; pending: number | null }) {
+  if (!status) return null;
+  const latest = trace.slice(0, 3);
+  const tone = (st: string) => (["FAILED", "BLOCKED"].includes(st) ? "bad" : ["WAITING", "ESCALATED"].includes(st) ? "warn" : "ok");
+  return (
+    <section className="spotlight" aria-label="Orchestrator workflow spotlight">
+      <div className="spotlight-head"><b>● Orchestrator workflow spotlight</b><span>Central pipeline trace · from recorded events</span></div>
+      <div className="spotlight-line"><span className="tag">[ORCHESTRATOR]</span>
+        STATE: {status.workflows_running ? "ACTIVE" : "IDLE"} | RUNNING: {status.workflows_running} | AWAITING HUMAN: {pending ?? status.pending_approvals}
+        {status.jobs_waiting_for_worker > 0 && <span className="warn"> | {status.jobs_waiting_for_worker} JOB(S) WAITING FOR THE WORKER</span>}
+      </div>
+      <div className="spotlight-line"><span className="tag">[POLICY_GATE]</span>
+        ENFORCED ON EVERY SEND | BLOCKED (7D): <span className={status.blocked_by_policy_7d ? "warn" : "ok"}>{status.blocked_by_policy_7d}</span>
+      </div>
+      <div className="spotlight-line"><span className="tag">[SHARED_MEMORY]</span>
+        {status.memory_entries} ENTRIES | AGENTS ACTIVE (10 MIN): {status.agents_active_10m.length ? status.agents_active_10m.map((a) => (TRACE_AGENTS[a]?.label ?? a).toUpperCase()).join(", ") : "NONE"}
+      </div>
+      {latest.length === 0 && <div className="spotlight-line live"><span className="tag">[LIVE_TRACE]</span>NO AGENT ACTIVITY RECORDED YET</div>}
+      {latest.map((e) => (
+        <div key={e.id} className="spotlight-line live"><span className="tag">[LIVE_TRACE]</span>
+          {(TRACE_AGENTS[e.agent]?.label ?? e.agent).toUpperCase()} :: {e.action} → <span className={tone(e.status)}>{e.result || e.status}</span>
+          <span className="tag"> · {timeAgo(e.completed_at ?? e.started_at)}</span>
+        </div>
+      ))}
     </section>
   );
 }

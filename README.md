@@ -12,6 +12,8 @@ Analytics → Learning.
 - A **Safety Agent / policy layer** that is independent of the LLM keeps them responsible.
 - An **approvals inbox** escalates only what matters, and always says why.
 - **Analytics insights** are stored in memory and reused by future workflows.
+- **Social Studio** drafts one static image post and one short video post for your social page every
+  week (Nano Banana images, Veo videos). Each one waits for your approval and is never auto-published.
 
 The sales core (unchanged from the MVP) acts as an AI growth team that:
 
@@ -24,7 +26,7 @@ The sales core (unchanged from the MVP) acts as an AI growth team that:
 7. **Stops immediately** on a reply, an unsubscribe, a paused campaign or a **Forget Me** request.
 8. Shows basic **campaign analytics** and AI insights.
 
-There is one LLM behind six specialized agents and an orchestrator. The LLM writes and
+There is one LLM behind all the specialized agents and the orchestrator. The LLM writes and
 classifies; the backend enforces every business rule. See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ```text
@@ -212,6 +214,7 @@ scores, tiers, agent reasoning, campaign data or other customers.
 | Email (Resend) | `EMAIL_PROVIDER=resend`, `EMAIL_API_KEY=…`, `EMAIL_FROM_ADDRESS="You <you@yourdomain.com>"` |
 | Web search (Tavily) | `SEARCH_PROVIDER=tavily`, `SEARCH_API_KEY=…` (the lead's own website is always fetched) |
 | Webhooks | `WEBHOOK_SECRET=…`, sent by your provider as the `X-Webhook-Secret` header |
+| Social media (Gemini) | `MEDIA_PROVIDER=gemini`, `GEMINI_API_KEY=…`; optionally `GEMINI_IMAGE_MODEL` (default `gemini-2.5-flash-image`, "Nano Banana") and `GEMINI_VIDEO_MODEL` (default `veo-3.1-generate-preview`) |
 
 To add another LLM provider, implement `LLMProvider.complete_json` in
 `backend/app/services/llm/` and register it in `build_provider()`. Agents don't change.
@@ -219,6 +222,30 @@ To add another LLM provider, implement `LLMProvider.complete_json` in
 **Inbound replies:** point your inbound-email provider at `POST /webhooks/inbound-email` with
 `{organization_id, from_address, subject, body, message_id}`. Delivery events go to
 `POST /webhooks/email-status`. Both endpoints are idempotent.
+
+## Social Studio (weekly promotion posts)
+
+Each week GrowthOS drafts **one static image post and one short video post** for the business page.
+
+1. The **Social Content Agent** (prompt `social_v1`) picks a theme it hasn't used recently and writes
+   captions, hashtags, an on-image headline and prompts for the image and video models. It may use
+   only the business profile and product catalogue. Deterministic checks reject invented offers,
+   prices, numbers and absolute claims ("guaranteed", "#1") that the business never stated.
+2. The **Safety Agent** checks your banned phrases and each platform's caption limits. A flagged post
+   is marked *Needs review* and can't be approved until you fix it.
+3. The **media provider** renders the media. With `MEDIA_PROVIDER=gemini` it calls Nano Banana
+   (`gemini-2.5-flash-image`) for the image and Veo (polled long-running operation) for an ~8-second
+   9:16 video. In mock mode the previews are clearly labelled SVG placeholders built from the real
+   captions. A media failure is reported as *Failed* with the provider's error; nothing is faked.
+4. Both posts go to the **Human Approval Center** and **Social Studio**. There you can edit,
+   regenerate the media, approve or reject. Approved posts can be downloaded together with their
+   caption. GrowthOS never publishes to a social network.
+
+The worker queues this automatically once per business per week (`SOCIAL_AUTO_WEEKLY=true`; toggle
+per business in *Settings & Rules*). You can also run it on demand: type *"Create this week's social
+media posts"* in the Command Center or click *Generate* in Social Studio. Approved and rejected posts
+are never overwritten. Media files are stored in `MEDIA_DIR` (default `backend/media/`, gitignored)
+and served only to the business owner.
 
 ## Business rules (always enforced by the backend)
 
@@ -313,7 +340,9 @@ POST /leads/bulk   POST /leads/{id}/convert
 GET|POST /customers   GET /customers/{id}   POST /customers/{id}/purchases | portal-access | messages
 GET|POST|PUT /products   GET|POST|PUT|DELETE /knowledge   POST /knowledge/search   GET /inbox
 GET /warranty-claims   PATCH /warranty-claims/{id}   GET /service-requests   PATCH /service-requests/{id}
-POST /lifecycle/run    GET /notifications
+POST /lifecycle/run    GET /notifications      GET /system/status
+GET /social/overview | posts   POST /social/generate {week_start?, regenerate?}
+PATCH /social/posts/{id}   POST /social/posts/{id}/approve | reject | regenerate-media   GET /social/posts/{id}/media
 Portal sign-in (public): POST /portal-auth/request {business_id, email}   POST /portal-auth/verify {request_id, code}
 Portal: GET /portal/me | products | products/{purchase_id} | warranty | service | appointments |
         conversations | notifications    POST /portal/support/ask | warranty | service |
@@ -341,6 +370,7 @@ never returned.
 
 ## Deliberately out of scope
 
-The MVP leaves out fine-tuning, voice, social and WhatsApp automation, CRM integrations, browser
+The MVP leaves out fine-tuning, voice, social *publishing* (posts are drafted and approved, then you
+post them yourself) and WhatsApp automation, CRM integrations, browser
 agents, vector infrastructure, billing, mobile apps and complex permissions. Open tracking is
 not implemented either, and analytics reports opens as "not tracked" rather than guessing.

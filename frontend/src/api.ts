@@ -62,6 +62,13 @@ export const api = {
   del: <T>(path: string) => request<T>("DELETE", path),
 };
 
+/** Authenticated binary download (e.g. generated social media). Returns an object URL; revoke it when done. */
+export async function fetchObjectUrl(path: string): Promise<string> {
+  const response = await fetch(`${BASE}${path}`, { headers: auth.token ? { Authorization: `Bearer ${auth.token}` } : {} });
+  if (!response.ok) throw new ApiError(response.status, `Could not load media (${response.status})`);
+  return URL.createObjectURL(await response.blob());
+}
+
 export function describeError(err: unknown): string {
   if (err instanceof ApiError) {
     const explanation = err.details?.explanation as string | undefined;

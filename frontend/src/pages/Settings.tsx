@@ -162,6 +162,13 @@ function PolicyCard() {
       <div className="stack" style={{ marginTop: 10 }}>
         <label className="checkbox"><input type="checkbox" checked={p.auto_handle_routine} onChange={(e) => set("auto_handle_routine", e.target.checked)} /> Auto-handle routine customer messages (answers only from the knowledge base)</label>
         <label className="checkbox"><input type="checkbox" checked={p.lifecycle_enabled} onChange={(e) => set("lifecycle_enabled", e.target.checked)} /> Send lifecycle follow-ups (setup help, check-ins, warranty expiry, post-service)</label>
+        <label className="checkbox"><input type="checkbox" checked={p.social_weekly_enabled} onChange={(e) => set("social_weekly_enabled", e.target.checked)} /> Draft one static + one video social post every week (always waits for your approval; never auto-published)</label>
+        <div className="actions small">Social platforms:
+          {["instagram", "facebook", "linkedin", "x", "tiktok"].map((pl) => (
+            <label key={pl} className="checkbox" style={{ marginBottom: 0 }}><input type="checkbox" checked={p.social_platforms.includes(pl)}
+              onChange={(e) => set("social_platforms", e.target.checked ? [...p.social_platforms, pl] : p.social_platforms.filter((x) => x !== pl))} /> {pl}</label>
+          ))}
+        </div>
         <label className="checkbox"><input type="checkbox" checked={p.warranty_auto_approve} onChange={(e) => set("warranty_auto_approve", e.target.checked)} /> Auto-approve warranty claims that pass the eligibility rules (off = always human)</label>
       </div>
       <button className="primary" onClick={save} disabled={!!action.busy}>Save rules</button>

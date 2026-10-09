@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, container, current_user
 from app.db import get_db
 from app.errors import InvalidStateError
-from app.models import (Approval, Customer, Email, EmailReply, Lead, Message, ServiceRequest, SocialPost,
+from app.models import (Approval, Customer, Email, EmailDraft, EmailReply, Lead, Message, ServiceRequest, SocialPost,
                         WarrantyClaim)
 from app.models.enums import ApprovalStatus, ApprovalType, ServiceStatus, WarrantyStatus
 from app.services import approval_service, customer_care, email_service, social_service
@@ -30,7 +30,9 @@ class Decision(BaseModel):
 def approval_dict(db: Session, a: Approval) -> dict:
     subject = {}
     if a.email_id and (e := db.get(Email, a.email_id)):
-        subject = {"kind": "email", "id": str(e.id), "subject": e.subject, "body": e.body, "status": e.status.value}
+        draft = db.get(EmailDraft, e.draft_id) if e.draft_id else None
+        subject = {"kind": "email", "id": str(e.id), "subject": e.subject, "body": e.body, "status": e.status.value,
+                   "draft_confidence": draft.confidence if draft else None}
     elif a.reply_id and (r := db.get(EmailReply, a.reply_id)):
         subject = {"kind": "reply", "id": str(r.id), "body": r.body, "classification": r.classification.value if r.classification else None,
                    "intents": r.intents}
@@ -45,7 +47,8 @@ def approval_dict(db: Session, a: Approval) -> dict:
     elif a.social_post_id and (sp := db.get(SocialPost, a.social_post_id)):
         subject = {"kind": "social_post", "id": str(sp.id), "post_kind": sp.kind, "status": sp.status,
                    "theme": sp.theme, "caption": sp.caption, "hashtags": sp.hashtags, "policy_notes": sp.policy_notes,
-                   "has_media": bool(sp.media_path), "is_mock_media": sp.media_provider == "mock"}
+                   "has_media": bool(sp.media_path), "media_mime": sp.media_mime, "updated_at": sp.updated_at,
+                   "is_mock_media": sp.media_provider == "mock"}
     lead = db.get(Lead, a.lead_id) if a.lead_id else None
     customer = db.get(Customer, a.customer_id) if a.customer_id else None
     return {"id": str(a.id), "type": a.approval_type.value, "status": a.status.value, "priority": a.priority.value,

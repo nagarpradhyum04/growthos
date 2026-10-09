@@ -1,7 +1,7 @@
 // Agent trace UI built only from recorded workflow events (never simulated).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, describeError } from "../api";
+import { api, describeError, fetchObjectUrl } from "../api";
 import type { ApprovalItem, TraceEvent } from "../types";
 import { fmtDuration, timeAgo } from "./agents";
 import { Badge } from "./ui";
@@ -20,6 +20,8 @@ export const TRACE_AGENTS: Record<string, { label: string; kind: "agent" | "huma
   support: { label: "Product Support AI", kind: "agent" },
   warranty: { label: "Warranty check", kind: "rule" },
   access: { label: "Access Agent", kind: "rule" },
+  social: { label: "Social Content Agent", kind: "agent" },
+  media: { label: "Media Studio", kind: "agent" },
   system: { label: "System", kind: "system" },
 };
 
@@ -77,6 +79,8 @@ const FLOW: { key: string; label: string; agents: string[]; kind: string; match?
   { key: "followup", label: "Follow-up", agents: ["followup"], kind: "agent" },
   { key: "analytics", label: "Analytics", agents: ["analytics"], kind: "agent" },
   { key: "memory", label: "Memory", agents: ["memory"], kind: "system" },
+  { key: "social", label: "Social Content", agents: ["social"], kind: "agent" },
+  { key: "media", label: "Media (Nano Banana / Veo)", agents: ["media"], kind: "agent" },
 ];
 
 const STATE_STAGE: Record<string, string> = {
@@ -95,7 +99,8 @@ export function OrchestrationFlow({ events, state, title = "Orchestration workfl
   events: TraceEvent[]; state?: string; title?: string; only?: string[];
 }) {
   const current = state ? STATE_STAGE[state] : undefined;
-  const stages = FLOW.filter((s) => !only || only.includes(s.key)).map((s) => {
+  const ordered = only ? only.map((k) => FLOW.find((s) => s.key === k)).filter((s): s is (typeof FLOW)[number] => !!s) : FLOW;
+  const stages = ordered.map((s) => {
     const mine = events.filter((e) => s.agents.includes(e.agent) && (!s.match || s.match(e)));
     const last = mine[mine.length - 1];
     let st = last ? FLOW_STATE[last.status] ?? "completed" : "pending";
@@ -138,8 +143,32 @@ export function TierBadge({ tier }: { tier: string | null | undefined }) {
 
 const TYPE_LABEL: Record<string, string> = {
   OUTBOUND_EMAIL: "Outbound email", REPLY_ESCALATION: "Prospect reply", MESSAGE_ESCALATION: "Customer message",
-  WARRANTY_CLAIM: "Warranty claim", SERVICE_REQUEST: "Service request",
+  WARRANTY_CLAIM: "Warranty claim", SERVICE_REQUEST: "Service request", SOCIAL_POST: "Social post",
 };
+
+/** Loads owner-only media (auth header) into an object URL. */
+export function useMediaUrl(path: string | null) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!path) { setUrl(null); return; }
+    let objectUrl: string | null = null;
+    let alive = true;
+    fetchObjectUrl(path).then((u) => { objectUrl = u; if (alive) setUrl(u); else URL.revokeObjectURL(u); })
+      .catch((e) => alive && setError(describeError(e)));
+    return () => { alive = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
+  }, [path]);
+  return { url, error };
+}
+
+export function MediaPreview({ postId, mime, version, className }: { postId: string; mime: string | null; version?: string; className?: string }) {
+  const { url, error } = useMediaUrl(`/social/posts/${postId}/media?v=${encodeURIComponent(version ?? "")}`);
+  if (error) return <div className="placeholder">{error}</div>;
+  if (!url) return <div className="placeholder">Loading media…</div>;
+  return mime?.startsWith("video/")
+    ? <video className={className} src={url} controls loop muted playsInline />
+    : <img className={className} src={url} alt="Generated social media post" />;
+}
 
 /** One pending human decision with real backend actions. */
 export function ApprovalCard({ item, onDone }: { item: ApprovalItem; onDone: () => void }) {
@@ -171,6 +200,10 @@ export function ApprovalCard({ item, onDone }: { item: ApprovalItem; onDone: () 
             <span className={`prio prio-${item.priority.toLowerCase()}`}>{item.priority}</span>
             <span className="muted small">{TYPE_LABEL[item.type]}</span>
             <TierBadge tier={item.tier} />
+            {typeof item.subject.draft_confidence === "number" && item.subject.draft_confidence > 0 && (
+              <span className="ai-confidence" title="Self-reported by the Outreach Agent when it wrote the draft">
+                AI confidence: {Math.round((item.subject.draft_confidence as number) * 100)}%</span>
+            )}
           </div>
           <h3 className="approval-title">{item.title}</h3>
         </div>
@@ -178,6 +211,14 @@ export function ApprovalCard({ item, onDone }: { item: ApprovalItem; onDone: () 
       </header>
       <p className="approval-reason"><b>Why:</b> {item.reason}</p>
       {typeof subj.body === "string" && <blockquote className="clamp">{subj.body}</blockquote>}
+      {subj.kind === "social_post" && typeof subj.id === "string" && (
+        <>
+          {subj.has_media && <MediaPreview postId={subj.id} mime={(subj.media_mime as string) ?? null} version={String(subj.updated_at ?? "")} className="approval-media" />}
+          {subj.is_mock_media && <span className="muted small">Mock media preview — set MEDIA_PROVIDER=gemini for Nano Banana / Veo.</span>}
+          <blockquote className="clamp">{subj.caption}</blockquote>
+          {Array.isArray(subj.hashtags) && <div className="hashtags">{subj.hashtags.map((h) => <span key={h}>{h}</span>)}</div>}
+        </>
+      )}
       {typeof subj.issue === "string" && <blockquote>{subj.issue}</blockquote>}
       {item.recommended_action && <p className="small"><b>Recommended:</b> → {item.recommended_action}</p>}
       {pending && item.type === "MESSAGE_ESCALATION" && (
@@ -192,13 +233,17 @@ export function ApprovalCard({ item, onDone }: { item: ApprovalItem; onDone: () 
       {pending ? (
         <div className="actions approval-actions">
           {item.type === "OUTBOUND_EMAIL" && <>
-            <button className="primary" disabled={busy} onClick={() => act("approve", { send: true })}>Approve &amp; send</button>
-            {typeof subj.id === "string" && <Link className="button" to={`/emails/${subj.id}`}>Edit</Link>}
+            <button className="primary" disabled={busy} onClick={() => act("approve", { send: true })} title="Approve and send; can_send() still checks every rule">Approve &amp; execute</button>
+            {typeof subj.id === "string" && <Link className="button" to={`/emails/${subj.id}`}>Edit response</Link>}
           </>}
-          {item.type === "MESSAGE_ESCALATION" && <button className="primary" disabled={busy || !response.trim()} onClick={() => act("approve")}>Send response</button>}
+          {item.type === "MESSAGE_ESCALATION" && <button className="primary" disabled={busy || !response.trim()} onClick={() => act("approve")}>Approve &amp; send response</button>}
           {item.type === "REPLY_ESCALATION" && <button className="primary" disabled={busy} onClick={() => act("approve", { note: note || "Handled by owner" })}>Mark handled</button>}
           {item.type === "WARRANTY_CLAIM" && <button className="primary" disabled={busy} onClick={() => act("approve", { note: note || "Approved" })}>Approve claim</button>}
           {item.type === "SERVICE_REQUEST" && <Link className="button primary-outline" to="/care">Schedule →</Link>}
+          {item.type === "SOCIAL_POST" && <>
+            <button className="primary" disabled={busy} onClick={() => act("approve")} title="Marks the post approved for publishing. GrowthOS never posts automatically.">Approve post</button>
+            <Link className="button" to="/social">Edit post</Link>
+          </>}
           <button className="danger-outline" disabled={busy} onClick={() => act("reject", { note: note || (item.type === "WARRANTY_CLAIM" ? "" : "Rejected") })}>Reject</button>
           <button disabled={busy} onClick={() => act("take-over")}>Take over</button>
           {item.can_automate && <button className="link" disabled={busy} onClick={() => act("mark-automated")} title="Resolve and automate this category in future">Mark as automated</button>}
