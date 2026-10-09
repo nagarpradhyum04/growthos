@@ -9,19 +9,22 @@ from sqlalchemy.orm import Session
 from app.api.deps import CurrentUser, container, current_user
 from app.db import get_db
 from app.models import Campaign, Lead, Workflow, WorkflowEvent
-from app.models.enums import WorkflowType
+from app.errors import InvalidStateError
+from app.models.enums import CampaignStatus, WorkflowType
+from app.services import command_router
 from app.services import jobs
 from app.services import workflow_service as wfs
 from app.services.common import get_owned
 from app.services.container import Container
-from app.services.orchestrator import GOAL_PLAN, Orchestrator
+from app.services.orchestrator import Orchestrator
 
 router = APIRouter(tags=["orchestrator"])
 
 
 class GoalRequest(BaseModel):
     goal: str = Field(min_length=3, max_length=1000)
-    campaign_id: uuid.UUID
+    campaign_id: uuid.UUID | None = None  # only needed for "find customers" commands
+    command: str | None = None  # optional explicit command key (e.g. from a suggestion chip)
     max_leads: int = Field(default=25, ge=1, le=100)
 
 
@@ -34,6 +37,7 @@ def event_dict(e: WorkflowEvent) -> dict:
 
 def workflow_dict(w: Workflow, company: str | None = None) -> dict:
     return {"id": str(w.id), "type": w.workflow_type.value, "goal": w.goal, "state": w.state.value,
+            "command": w.command,
             "parent_id": str(w.parent_id) if w.parent_id else None, "lead_id": str(w.lead_id) if w.lead_id else None,
             "campaign_id": str(w.campaign_id) if w.campaign_id else None,
             "customer_id": str(w.customer_id) if w.customer_id else None, "plan": w.plan, "summary": w.summary,
@@ -41,16 +45,45 @@ def workflow_dict(w: Workflow, company: str | None = None) -> dict:
             "company_name": company}
 
 
+@router.get("/workflows/commands")
+def list_commands(cu: CurrentUser = Depends(current_user)):
+    """Commands the Orchestrator understands, with example phrasings for suggestions."""
+    return [command_router.describe(cmd) for cmd in command_router.COMMANDS]
+
+
+@router.get("/workflows/route")
+def preview_route(text: str, cu: CurrentUser = Depends(current_user)):
+    """Preview which workflow a command maps to (deterministic, no LLM)."""
+    r = command_router.route(text)
+    return {"command": command_router.describe(r.command) if r.command else None, "matched": r.matched,
+            "alternatives": r.alternatives}
+
+
 @router.post("/workflows/goal", status_code=202)
 def start_goal(body: GoalRequest, run_now: bool = False, cu: CurrentUser = Depends(current_user),
                db: Session = Depends(get_db), c: Container = Depends(container)):
-    """Give GrowthOS a business goal. The Orchestrator plans it and fans out over the campaign's prospects."""
-    campaign = get_owned(db, Campaign, body.campaign_id, cu.org_id)
-    wf = wfs.start_workflow(db, cu.org_id, WorkflowType.GOAL, goal=body.goal.strip(), campaign_id=campaign.id,
-                            plan=GOAL_PLAN)
+    """Give GrowthOS a command. The Orchestrator maps it to a known workflow and runs it in the background.
+    Several commands can run at the same time; each gets its own workflow and trace."""
+    cmd = command_router.BY_KEY.get(body.command or "") or command_router.route(body.goal).command
+    if cmd is None:
+        raise InvalidStateError(
+            "I couldn't map that to something GrowthOS can safely do. Try one of the suggestions.",
+            details={"suggestions": [e for c_ in command_router.COMMANDS for e in c_.examples[:1]]})
+    campaign_id = None
+    if cmd.needs_campaign:
+        if body.campaign_id:
+            campaign_id = get_owned(db, Campaign, body.campaign_id, cu.org_id).id
+        else:
+            campaign_id = db.scalar(select(Campaign.id).where(Campaign.organization_id == cu.org_id,
+                                                              Campaign.status == CampaignStatus.ACTIVE)
+                                    .order_by(Campaign.created_at.desc()))
+            if campaign_id is None:
+                raise InvalidStateError("Create an active campaign with prospects first.")
+    wf = wfs.start_workflow(db, cu.org_id, WorkflowType.GOAL, goal=body.goal.strip(), campaign_id=campaign_id,
+                            plan=list(cmd.plan), command=cmd.key)
     db.commit()
     if run_now:
-        Orchestrator(db, c).run_goal(wf, body.max_leads)
+        Orchestrator(db, c).run_command(wf, body.max_leads)
     else:
         jobs.enqueue(db, "run_goal", {"workflow_id": str(wf.id), "max_leads": body.max_leads},
                      organization_id=cu.org_id, dedupe_key=f"goal:{wf.id}")

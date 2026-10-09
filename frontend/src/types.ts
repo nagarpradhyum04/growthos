@@ -5,7 +5,7 @@ export type EmailStatus =
 
 export interface Me {
   user: { id: string; email: string; name: string; organization_id: string };
-  organization: { id: string; name: string; automated_sending_enabled: boolean };
+  organization: { id: string; name: string; automated_sending_enabled: boolean; business_code: string; portal_url: string };
 }
 
 export interface Campaign {
@@ -263,6 +263,7 @@ export interface TraceEvent {
 
 export interface WorkflowSummary {
   id: string;
+  command: string | null;
   type: "GOAL" | "LEAD" | "INBOUND" | "LIFECYCLE";
   goal: string;
   state: string;

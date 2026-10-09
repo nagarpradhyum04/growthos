@@ -78,8 +78,23 @@ cd backend && python -m app.worker
 ```bash
 cd frontend
 npm install
-npm run dev                              # http://localhost:5173 (proxies /api → :8000)
+npm run dev                              # business app:     http://localhost:5173 (proxies /api → :8000)
+npm run dev:portal                       # customer portal:  http://localhost:5174 (same API + database)
 ```
+
+The customer portal is a **separate app** on its own port. To sign in, a customer enters:
+
+1. The **Business ID** the owner shares, shown on the owner's Customers and Settings pages (e.g. `GOS-AVYKQQ`).
+2. Their email address.
+
+An **Access Agent** checks the request. It confirms that the Business ID exists, that the email is on
+that business's customer list, that the customer hasn't opted out, and that the request rate is
+reasonable. It then emails a one-time 6-digit code. With `EMAIL_PROVIDER=mock`, the code is shown on
+screen for local demos.
+
+The check is rule-based on purpose, because granting access to customer data is a security decision.
+Every attempt shows up in the owner's agent trace. The response never reveals whether an email is
+registered.
 
 ### 6. Try the flow
 
@@ -107,13 +122,23 @@ fabricate agent output, metrics or traces; those come from actually running the 
 
 | Role | Login |
 | --- | --- |
-| Business owner | `demo@growthos.example` / `demo-password` |
-| Customer | `customer@growthos.example` / `demo-password` |
+| Business owner (http://localhost:5173) | `demo@growthos.example` / `demo-password` |
+| Customer portal (http://localhost:5174) | Business ID printed by the seed + `customer@growthos.example` (code shown on screen in mock mode) |
 
 Keep the worker running for the goal workflow, follow-ups and lifecycle messages.
 
-1. **Owner → Command Center:** run the goal *"Find high-quality customers for our business"*. The
-   Orchestrator plans the goal and fans out to one lead workflow per prospect. The workflow page shows
+1. **Owner → Command Center:** type a command or click a suggestion. The Orchestrator understands
+   these commands, and several can run at once, each with its own trace:
+   - *Find high-quality customers*
+   - *Follow up with leads who haven't replied*
+   - *Triage the inbox*
+   - *What needs my attention today?*
+   - *Check in with existing customers*
+   - *Analyze performance and learn*
+
+   A live preview shows which workflow your text maps to. Anything it can't map safely is refused
+   with suggestions. For *Find high-quality customers*, the Orchestrator fans out to one lead workflow
+   per prospect. The workflow page shows
    the live orchestration flow and agent trace:
    - Research, Qualification and Outreach run on every prospect.
    - The Safety Agent checks each draft.
@@ -126,7 +151,8 @@ Keep the worker running for the goal workflow, follow-ups and lifecycle messages
      discount/purchase intent.
    - A *"thanks!"* reply stays GREEN and is not escalated.
 4. **Win the deal:** on the lead, click *Convert to customer* and grant portal access.
-5. **Customer → portal:** the customer sees their products with warranty status and does the following:
+5. **Customer → portal (http://localhost:5174):** the customer signs in with the Business ID and their
+   email, sees their products with warranty status, and does the following:
    - Asks the Support AI *"What does error E2 mean?"* and gets an answer that cites the manual.
    - Asks something that isn't documented. The AI answers *"I couldn't find that information…"*.
    - Submits a warranty claim, books a repair, and sends a complaint, which is escalated **RED**.
@@ -170,8 +196,9 @@ reason.
 
 ## Roles
 
-- **Owners** use every business endpoint.
-- **Customers** (portal users created by the owner) can only call `/portal/*`.
+- **Owners** sign in to the business app and use every business endpoint.
+- **Customers** sign in only through the customer portal (Business ID + email code) and can only call
+  `/portal/*`. The owner login rejects customer accounts.
 
 This is enforced server-side: owner endpoints return 403 for customer tokens and vice versa. Every
 portal query is scoped to the customer bound to the token. Portal responses never include lead
@@ -278,7 +305,8 @@ POST /webhooks/inbound-email | email-status
 GrowthOS OS layer:
 
 ```text
-POST /workflows/goal   GET /workflows   GET /workflows/{id} (trace + children)   GET /trace
+POST /workflows/goal {goal, campaign_id?, command?}   GET /workflows/commands   GET /workflows/route?text=
+GET /workflows   GET /workflows/{id} (trace + children)   GET /trace
 GET /approvals   POST /approvals/{id}/approve | reject | take-over | mark-automated
 GET|POST /memory   DELETE /memory/{id}          GET|PUT /policy
 POST /leads/bulk   POST /leads/{id}/convert
@@ -286,6 +314,7 @@ GET|POST /customers   GET /customers/{id}   POST /customers/{id}/purchases | por
 GET|POST|PUT /products   GET|POST|PUT|DELETE /knowledge   POST /knowledge/search   GET /inbox
 GET /warranty-claims   PATCH /warranty-claims/{id}   GET /service-requests   PATCH /service-requests/{id}
 POST /lifecycle/run    GET /notifications
+Portal sign-in (public): POST /portal-auth/request {business_id, email}   POST /portal-auth/verify {request_id, code}
 Portal: GET /portal/me | products | products/{purchase_id} | warranty | service | appointments |
         conversations | notifications    POST /portal/support/ask | warranty | service |
         service/{id}/cancel | conversations    PATCH /portal/preferences

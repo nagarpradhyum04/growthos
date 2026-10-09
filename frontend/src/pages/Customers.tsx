@@ -4,7 +4,7 @@ import { api } from "../api";
 import { TierBadge } from "../components/trace";
 import { Badge, Card, Empty, ErrorBanner, Notice, when } from "../components/ui";
 import { useAction, useAsync } from "../components/useAsync";
-import type { CustomerDetail, CustomerRow, ProductRow, WarrantyInfo } from "../types";
+import type { CustomerDetail, CustomerRow, Me, ProductRow, WarrantyInfo } from "../types";
 
 export function WarrantyBadge({ w, expires }: { w: WarrantyInfo; expires: string | null }) {
   const text = {
@@ -15,6 +15,26 @@ export function WarrantyBadge({ w, expires }: { w: WarrantyInfo; expires: string
   }[w.status];
   const tone = { ACTIVE: "good", EXPIRING_SOON: "warn", EXPIRED: "bad", NO_WARRANTY: "muted" }[w.status];
   return <span className={`badge ${tone}`}>{text}</span>;
+}
+
+export function BusinessIdBanner() {
+  const me = useAsync(() => api.get<Me>("/auth/me"));
+  const [copied, setCopied] = useState(false);
+  const org = me.data?.organization;
+  if (!org) return null;
+  return (
+    <div className="business-id-banner">
+      <div>
+        <div className="muted small">Your Business ID — share it with customers</div>
+        <div className="business-id">{org.business_code}</div>
+      </div>
+      <div className="small">
+        Customers sign in at <a href={org.portal_url} target="_blank" rel="noreferrer">{org.portal_url}</a> with this
+        Business ID and the email you registered for them. An access agent verifies the email and sends a one-time code.
+      </div>
+      <button onClick={() => { void navigator.clipboard?.writeText(org.business_code); setCopied(true); }}>{copied ? "Copied" : "Copy ID"}</button>
+    </div>
+  );
 }
 
 export default function Customers() {
@@ -32,20 +52,21 @@ export default function Customers() {
   return (
     <>
       <h1>Customers</h1>
-      <p className="muted page-sub">Customers come from converted leads or are added directly. Their history is shared memory for every agent that serves them.</p>
+      <p className="muted page-sub">Your customer list. Customers come from converted leads or are added directly; they use their own portal app, not this one.</p>
+      <BusinessIdBanner />
       <ErrorBanner error={list.error ?? action.error} />
       <Card>
         {list.data?.length === 0 && <Empty>No customers yet. Convert a lead or add one below.</Empty>}
         {!!list.data?.length && (
           <table>
-            <thead><tr><th>Customer</th><th>Company</th><th>Source</th><th>Portal</th><th>Since</th></tr></thead>
+            <thead><tr><th>Customer</th><th>Company</th><th>Source</th><th>Portal sign-in</th><th>Since</th></tr></thead>
             <tbody>
               {list.data.map((c) => (
                 <tr key={c.id} className="clickable" onClick={() => navigate(`/customers/${c.id}`)}>
                   <td><Link to={`/customers/${c.id}`}>{c.name}</Link><div className="muted small">{c.email}</div></td>
                   <td>{c.company || "—"}</td>
                   <td className="small">{c.lead_id ? <Link to={`/leads/${c.lead_id}`} onClick={(e) => e.stopPropagation()}>Converted lead</Link> : "Added manually"}</td>
-                  <td>{c.portal_access ? <Badge value="ACTIVE" /> : <span className="muted small">No access</span>}</td>
+                  <td>{c.portal_access ? <Badge value="ACTIVE" /> : <span className="muted small">Not signed in yet</span>}</td>
                   <td className="small muted">{when(c.created_at)}</td>
                 </tr>
               ))}
@@ -71,7 +92,6 @@ export function CustomerView() {
   const c = useAsync(() => api.get<CustomerDetail>(`/customers/${id}`), [id]);
   const products = useAsync(() => api.get<ProductRow[]>("/products"));
   const [purchase, setPurchase] = useState({ product_id: "", purchased_at: new Date().toISOString().slice(0, 10), quantity: 1, serial_number: "", order_value: "" });
-  const [password, setPassword] = useState("");
   const [reply, setReply] = useState("");
   const action = useAction();
   const d = c.data;
@@ -117,12 +137,9 @@ export function CustomerView() {
           </form>
         </Card>
         <Card title="Customer portal">
-          {d.portal_access ? <p className="small"><Badge value="ACTIVE" /> {d.name} can log in at /login with <b>{d.email}</b>.</p>
-            : <p className="small muted">No portal access yet.</p>}
-          <form className="inline-form" onSubmit={(e) => { e.preventDefault(); void run("portal", () => api.post(`/customers/${id}/portal-access`, { password }), "Portal access set."); setPassword(""); }}>
-            <input type="password" minLength={8} required placeholder="Set portal password (8+ chars)" value={password} onChange={(e) => setPassword(e.target.value)} />
-            <button>{d.portal_access ? "Reset password" : "Grant access"}</button>
-          </form>
+          <p className="small">{d.portal_access ? <><Badge value="ACTIVE" /> {d.name} has signed in to the portal.</>
+            : <span className="muted">{d.name} hasn't signed in yet.</span>}</p>
+          <p className="small muted">They sign in on the customer portal with your Business ID and <b>{d.email}</b>. Only emails on your customer list are accepted.</p>
           <p className="small muted">Lifecycle messages: {d.preferences.lifecycle_messages === false ? "opted out" : "on"} (customer-controlled)</p>
           <h3>Warranty claims</h3>
           {d.warranty_claims.length ? <ul className="list">{d.warranty_claims.map((w) => <li key={w.id}><span className="small">{w.issue.slice(0, 70)}</span><Badge value={w.status} /></li>)}</ul> : <p className="muted small">None</p>}

@@ -40,7 +40,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch {
     throw new ApiError(0, "Cannot reach the GrowthOS API. Is the backend running?");
   }
-  if (response.status === 401 && auth.token) {
+  if (response.status === 401 && auth.token && !path.startsWith("/portal-auth")) {
     auth.clear();
     window.location.href = "/login";
   }
@@ -48,6 +48,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (!response.ok) {
     const err = data?.error;
     const message = err?.message ?? data?.detail ?? `Request failed (${response.status})`;
+    // FastAPI's own validation/HTTP errors use {detail}; ours use {error}.
     throw new ApiError(response.status, typeof message === "string" ? message : "Request failed", err?.details ?? {});
   }
   return data as T;

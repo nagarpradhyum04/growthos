@@ -49,6 +49,8 @@ class OrganizationOut(ORM):
     id: uuid.UUID
     name: str
     automated_sending_enabled: bool
+    business_code: str
+    portal_url: str = ""
 
 
 class MeResponse(BaseModel):

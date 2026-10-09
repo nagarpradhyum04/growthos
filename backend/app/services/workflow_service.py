@@ -21,8 +21,8 @@ def now() -> datetime:
 
 def start_workflow(db: Session, organization_id: uuid.UUID, workflow_type: WorkflowType, *, goal: str = "",
                    lead_id=None, campaign_id=None, customer_id=None, parent_id=None,
-                   plan: list | None = None) -> Workflow:
-    wf = Workflow(organization_id=organization_id, workflow_type=workflow_type, goal=goal, lead_id=lead_id,
+                   plan: list | None = None, command: str | None = None) -> Workflow:
+    wf = Workflow(organization_id=organization_id, workflow_type=workflow_type, goal=goal, lead_id=lead_id, command=command,
                   campaign_id=campaign_id, customer_id=customer_id, parent_id=parent_id, plan=plan or [],
                   summary={}, state=WorkflowState.PENDING)
     db.add(wf)

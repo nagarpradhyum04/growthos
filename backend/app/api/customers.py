@@ -41,10 +41,6 @@ class ConvertIn(BaseModel):
     serial_number: str = ""
 
 
-class PortalAccessIn(BaseModel):
-    password: str = Field(min_length=8, max_length=200)
-
-
 class MessageIn(BaseModel):
     body: str = Field(min_length=1, max_length=5000)
 
@@ -58,6 +54,7 @@ def purchase_dict(pu: Purchase, product: Product) -> dict:
 
 
 def customer_dict(db: Session, c: Customer, detail: bool = False) -> dict:
+    # "portal_access": has this customer signed in to the portal at least once (Business ID + email code)?
     has_portal = db.scalar(select(User.id).where(User.customer_id == c.id)) is not None
     data = {"id": str(c.id), "name": c.name, "email": c.email, "phone": c.phone, "company": c.company,
             "status": c.status.value, "lead_id": str(c.lead_id) if c.lead_id else None, "notes": c.notes,
@@ -111,15 +108,6 @@ def add_purchase(customer_id: uuid.UUID, body: PurchaseIn, cu: CurrentUser = Dep
     pu = customer_service.add_purchase(db, c, **body.model_dump())
     db.commit()
     return purchase_dict(pu, db.get(Product, pu.product_id))
-
-
-@router.post("/customers/{customer_id}/portal-access")
-def portal_access(customer_id: uuid.UUID, body: PortalAccessIn, cu: CurrentUser = Depends(current_user),
-                  db: Session = Depends(get_db)):
-    c = get_owned(db, Customer, customer_id, cu.org_id)
-    user = customer_service.grant_portal_access(db, c, body.password)
-    db.commit()
-    return {"login_email": user.email, "portal_access": True}
 
 
 @router.post("/customers/{customer_id}/messages", status_code=201)

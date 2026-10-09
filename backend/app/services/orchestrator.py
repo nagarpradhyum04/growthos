@@ -253,6 +253,125 @@ class Orchestrator:
         db.commit()
         return stats
 
+    # ------------------------------------------------------------------ commands
+    def run_command(self, wf: Workflow, max_leads: int = 25) -> dict:
+        """Dispatch a business command (see command_router) to its workflow. Unknown commands never get here."""
+        handlers = {"acquire": lambda: self.run_goal(wf, max_leads), "followups": lambda: self._cmd_followups(wf),
+                    "inbox": lambda: self._cmd_inbox(wf), "approvals": lambda: self._cmd_approvals(wf),
+                    "lifecycle": lambda: self._cmd_lifecycle(wf), "insights": lambda: self._cmd_insights(wf)}
+        try:
+            return handlers[wf.command or "acquire"]()
+        except GrowthOSError as exc:
+            self.db.rollback()
+            wfs.record(self.db, wf, "orchestrator", "Run command", TraceStatus.FAILED, exc.message, state=WorkflowState.FAILED)
+            self.db.commit()
+            return {"error": exc.message}
+
+    def _understood(self, wf: Workflow, what: str) -> None:
+        wfs.record(self.db, wf, "orchestrator", "Understand command", TraceStatus.COMPLETED,
+                   f"“{wf.goal}” → {what}", detail={"command": wf.command, "plan": wf.plan})
+        self.db.commit()
+
+    def _finish(self, wf: Workflow, summary: dict, state: WorkflowState) -> dict:
+        wf.summary = summary
+        wfs.set_state(wf, state)
+        self.db.commit()
+        return summary
+
+    def _cmd_followups(self, wf: Workflow) -> dict:
+        from app.models import Followup
+        from app.models.enums import FollowupStatus
+        from app.services.followup_service import process_due_followups
+
+        self._understood(wf, "process follow-ups that are due (stop anyone who replied or opted out)")
+        wfs.set_state(wf, WorkflowState.FOLLOW_UP_SCHEDULED)
+        out = process_due_followups(self.db, self.container, organization_id=wf.organization_id)
+        drafted = out.get("generated", 0)
+        sent = out.get("generated_and_sent", 0)
+        stopped = sum(v for k, v in out.items() if k.startswith("cancelled"))
+        closed = out.get("limit_reached", 0)
+        nxt = self.db.scalar(select(Followup.due_at).where(Followup.organization_id == wf.organization_id,
+                                                           Followup.status == FollowupStatus.PENDING)
+                             .order_by(Followup.due_at))
+        result = (f"{drafted} follow-up(s) drafted for your review, {sent} sent automatically, {stopped} stopped by rules, "
+                  f"{closed} sequence(s) completed" if out else "No follow-ups are due right now")
+        if nxt:
+            result += f". Next one is due {nxt:%Y-%m-%d %H:%M}"
+        wfs.record(self.db, wf, "followup", "Process due follow-ups", TraceStatus.COMPLETED, result, detail=out)
+        waiting = drafted > 0
+        if waiting:
+            wfs.record(self.db, wf, "human", "Route drafts to business owner", TraceStatus.WAITING,
+                       f"{drafted} follow-up draft(s) waiting for your approval")
+        return self._finish(wf, {"drafted": drafted, "sent": sent, "stopped": stopped, "completed_sequences": closed},
+                            WorkflowState.AWAITING_APPROVAL if waiting else WorkflowState.COMPLETED)
+
+    def _cmd_inbox(self, wf: Workflow) -> dict:
+        from app.models import EmailReply
+        from app.services import reply_service
+
+        self._understood(wf, "classify unprocessed replies with Email Intelligence and escalate what matters")
+        pending = self.db.scalars(select(EmailReply).where(EmailReply.organization_id == wf.organization_id,
+                                                           EmailReply.analyzed_at.is_(None))).all()
+        wfs.set_state(wf, WorkflowState.REPLY_RECEIVED)
+        tiers = {"GREEN": 0, "YELLOW": 0, "RED": 0}
+        failed = 0
+        for reply in pending:
+            try:
+                reply_service.analyze_reply(self.db, reply, self.container)
+                self.db.commit()
+                if reply.tier:
+                    tiers[reply.tier.value] += 1
+            except GrowthOSError:
+                self.db.rollback()
+                failed += 1
+        escalated = tiers["YELLOW"] + tiers["RED"]
+        wfs.record(self.db, wf, "email_intelligence", "Classify new replies",
+                   TraceStatus.ESCALATED if escalated else TraceStatus.COMPLETED,
+                   (f"Analyzed {len(pending) - failed} reply(ies): {tiers['GREEN']} routine, {tiers['YELLOW']} opportunity, "
+                    f"{tiers['RED']} need a human" + (f"; {failed} failed" if failed else "")) if pending
+                   else "Inbox is clear — no unprocessed replies", detail=tiers)
+        return self._finish(wf, {"analyzed": len(pending) - failed, **{k.lower(): v for k, v in tiers.items()}, "failed": failed},
+                            WorkflowState.ESCALATED if escalated else WorkflowState.COMPLETED)
+
+    def _cmd_approvals(self, wf: Workflow) -> dict:
+        from app.models import Approval
+        from app.models.enums import ApprovalStatus
+
+        self._understood(wf, "brief you on everything waiting for a human decision")
+        items = self.db.scalars(select(Approval).where(Approval.organization_id == wf.organization_id,
+                                                       Approval.status == ApprovalStatus.PENDING)).all()
+        order = {"URGENT": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+        items = sorted(items, key=lambda a: order[a.priority.value])
+        by_priority: dict[str, int] = {}
+        for a in items:
+            by_priority[a.priority.value] = by_priority.get(a.priority.value, 0) + 1
+        top = [f"[{a.priority.value}] {a.title}" for a in items[:3]]
+        wfs.record(self.db, wf, "orchestrator", "Prioritize pending decisions", TraceStatus.COMPLETED,
+                   (f"{len(items)} decision(s) waiting: " + ", ".join(f"{n} {p.lower()}" for p, n in by_priority.items())
+                    + ". Most urgent: " + "; ".join(top)) if items else "Nothing is waiting for you",
+                   detail={"top": [{"id": str(a.id), "title": a.title, "reason": a.reason} for a in items[:5]]})
+        if items:
+            wfs.record(self.db, wf, "human", "Your decisions", TraceStatus.WAITING, "Open Approvals to act on them")
+        return self._finish(wf, {"pending": len(items), **{p.lower(): n for p, n in by_priority.items()}},
+                            WorkflowState.AWAITING_APPROVAL if items else WorkflowState.COMPLETED)
+
+    def _cmd_lifecycle(self, wf: Workflow) -> dict:
+        from app.services.lifecycle_service import process_lifecycle
+
+        self._understood(wf, "send due customer check-ins and warranty reminders within preferences and limits")
+        out = process_lifecycle(self.db, self.container, wf.organization_id)
+        wfs.record(self.db, wf, "followup", "Lifecycle follow-ups", TraceStatus.COMPLETED,
+                   f"{out['sent']} sent, {out['deferred']} deferred by frequency limits, {out['blocked']} blocked by "
+                   f"preferences/opt-out, {out['skipped_existing']} already sent", detail=out)
+        return self._finish(wf, out, WorkflowState.COMPLETED)
+
+    def _cmd_insights(self, wf: Workflow) -> dict:
+        from app.services import analytics_service
+
+        self._understood(wf, "analyze performance and store learnings in shared memory")
+        out = analytics_service.generate_insights(self.db, wf.organization_id, self.container, workflow=wf)
+        return self._finish(wf, {"insights_stored": len(out["stored_insights"])}, WorkflowState.COMPLETED)
+
     # ------------------------------------------------------------------ helpers
     def _agent_step(self, wf: Workflow, result: WorkflowResult, step: str, action: str, state: WorkflowState,
                     fn, summarize):

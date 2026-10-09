@@ -16,9 +16,9 @@ export default function Login() {
     setError(null);
     try {
       const body = mode === "login" ? { email: form.email, password: form.password } : form;
-      const { access_token, role } = await api.post<{ access_token: string; role?: string }>(`/auth/${mode}`, body);
-      auth.set(access_token, role ?? "owner");
-      navigate(role === "customer" ? "/portal" : mode === "register" ? "/settings" : "/");
+      const { access_token } = await api.post<{ access_token: string }>(`/auth/${mode}`, body);
+      auth.set(access_token, "owner");
+      navigate(mode === "register" ? "/settings" : "/");
     } catch (err) {
       setError(describeError(err));
     } finally {
@@ -34,7 +34,7 @@ export default function Login() {
         <div className="brand large">
           Growth<span>OS</span>
         </div>
-        <p className="muted">An AI operating system for business growth and customer relationships. Business owners and customers sign in here.</p>
+        <p className="muted">An AI operating system for business growth and customer relationships. Business owner sign-in.</p>
         <ErrorBanner error={error} />
         {mode === "register" && (
           <>
@@ -62,6 +62,7 @@ export default function Login() {
         <button type="button" className="link" onClick={() => setMode(mode === "login" ? "register" : "login")}>
           {mode === "login" ? "New here? Create an account" : "Already have an account? Sign in"}
         </button>
+        <p className="muted small">Are you a customer? Use the customer portal link and Business ID your supplier gave you.</p>
       </form>
     </div>
   );

@@ -462,3 +462,17 @@ blockquote.clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orie
 .list li.unread b { color: var(--accent); }
 pre.doc { white-space: pre-wrap; font-family: inherit; font-size: 13px; background: #fafbfc; padding: 10px; border-radius: 8px; }
 details summary { cursor: pointer; padding: 4px 0; }
+
+/* Command launcher, Business ID, portal login */
+.route-preview { margin: 8px 0 0; padding: 6px 10px; background: var(--agent-soft); border-radius: 6px; }
+.route-preview.unknown { background: var(--warn-soft); color: var(--warn); font-style: normal; }
+.suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; background: #fff; border: 1px solid #d9d0f7; color: var(--agent); }
+.chip:hover:not(:disabled) { background: var(--agent-soft); }
+.list.launched { margin-top: 10px; border-top: 1px solid var(--border); }
+.business-id-banner { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; background: var(--panel);
+  border: 1.5px dashed #9fb4ff; border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; }
+.business-id { font-size: 22px; font-weight: 800; letter-spacing: .08em; font-family: ui-monospace, Menlo, monospace; }
+.portal-auth { background: linear-gradient(180deg, #e9f4f3, var(--bg)); }
+.portal-auth .brand.large span { color: #1f6f8b; }
+@media (max-width: 700px) { .business-id-banner { grid-template-columns: 1fr; } }

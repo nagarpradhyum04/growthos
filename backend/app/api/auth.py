@@ -31,10 +31,16 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    if user.role != "owner":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Customers sign in at the customer portal with their Business ID and email.")
     return TokenResponse(access_token=create_access_token(user.id, user.organization_id), role=user.role)
 
 
 @router.get("/me", response_model=MeResponse)
 def me(cu: CurrentUser = Depends(current_user), db: Session = Depends(get_db)):
     org = db.get(Organization, cu.org_id)
-    return MeResponse(user=UserOut.model_validate(cu.user), organization=OrganizationOut.model_validate(org))
+    from app.config import get_settings
+
+    return MeResponse(user=UserOut.model_validate(cu.user),
+                      organization=OrganizationOut.model_validate(org).model_copy(update={"portal_url": get_settings().portal_url}))

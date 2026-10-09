@@ -5,9 +5,9 @@ product documentation, and one customer with portal access, so the full GrowthOS
 It only inserts ordinary records (as an owner would through the UI). It does NOT fabricate agent output,
 research, scores, metrics or traces — those are produced by actually running the agents.
 
-Logins created:
-  owner:    demo@growthos.example     / demo-password
-  customer: customer@growthos.example / demo-password
+Logins:
+  owner:    demo@growthos.example / demo-password            (business app, :5173)
+  customer: Business ID (printed below) + customer@growthos.example   (customer portal, :5174)
 """
 from datetime import date, timedelta
 
@@ -131,8 +131,10 @@ def run() -> None:
         customer_service.add_purchase(db, customer, product_id=ap900.id,
                                       purchased_at=customer_service.add_months(date.today(), -36) + timedelta(days=20),
                                       quantity=1, order_value=1999, serial_number="AP900-10544")
-        customer_service.grant_portal_access(db, customer, PASSWORD)
-    print(f"Demo data created.\n  Owner:    {OWNER_EMAIL} / {PASSWORD}\n  Customer: {CUSTOMER_EMAIL} / {PASSWORD}")
+        business_id = org.business_code
+    print(f"Demo data created.\n  Owner login (http://localhost:5173): {OWNER_EMAIL} / {PASSWORD}\n"
+          f"  Customer portal (http://localhost:5174): Business ID {business_id} + {CUSTOMER_EMAIL}\n"
+          "  (with EMAIL_PROVIDER=mock the sign-in code is shown on screen)")
 
 
 if __name__ == "__main__":

@@ -176,7 +176,7 @@ Physical damage, water damage and use of non-original filters are not covered.
 """
 
 
-def make_product_and_customer(client, auth, purchased_at="2026-09-01", email="pat@clinic.example", password="portal-pass-123"):
+def make_product_and_customer(client, auth, purchased_at="2026-09-01", email="pat@clinic.example"):
     product = client.post("/products", headers=auth, json={"name": "AP-500 Air Purifier", "sku": "AP500",
                                                            "category": "Air purifier", "warranty_months": 24,
                                                            "description": "Commercial HEPA air purifier"}).json()
@@ -189,7 +189,14 @@ def make_product_and_customer(client, auth, purchased_at="2026-09-01", email="pa
     purchase = client.post(f"/customers/{customer['id']}/purchases", headers=auth,
                            json={"product_id": product["id"], "purchased_at": purchased_at,
                                  "serial_number": "SN-1001", "order_value": 4000}).json()
-    client.post(f"/customers/{customer['id']}/portal-access", headers=auth, json={"password": password})
-    token = client.post("/auth/login", json={"email": email, "password": password}).json()
-    portal = {"Authorization": f"Bearer {token['access_token']}"}
+    portal = portal_login(client, auth, email)
     return product, customer, purchase, portal
+
+
+def portal_login(client, auth, email: str) -> dict:
+    """Customer portal sign-in: Business ID + email -> Access Agent -> one-time code (shown in mock mode)."""
+    business_id = client.get("/auth/me", headers=auth).json()["organization"]["business_code"]
+    req = client.post("/portal-auth/request", json={"business_id": business_id, "email": email}).json()
+    assert "dev_code" in req, req
+    token = client.post("/portal-auth/verify", json={"request_id": req["request_id"], "code": req["dev_code"]}).json()
+    return {"Authorization": f"Bearer {token['access_token']}"}

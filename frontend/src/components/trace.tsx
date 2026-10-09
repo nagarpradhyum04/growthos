@@ -19,6 +19,7 @@ export const TRACE_AGENTS: Record<string, { label: string; kind: "agent" | "huma
   analytics: { label: "Analytics Agent", kind: "agent" },
   support: { label: "Product Support AI", kind: "agent" },
   warranty: { label: "Warranty check", kind: "rule" },
+  access: { label: "Access Agent", kind: "rule" },
   system: { label: "System", kind: "system" },
 };
 

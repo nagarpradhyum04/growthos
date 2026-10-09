@@ -15,6 +15,8 @@ class Workflow(UUIDPk, Timestamps, OrgScoped, Base):
 
     workflow_type: Mapped[WorkflowType] = mapped_column(str_enum(WorkflowType), index=True, nullable=False)
     goal: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Which command the Orchestrator mapped the goal to (services/command_router.py).
+    command: Mapped[str | None] = mapped_column(String(32), nullable=True)
     state: Mapped[WorkflowState] = mapped_column(str_enum(WorkflowState), default=WorkflowState.PENDING,
                                                  index=True, nullable=False)
     parent_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("workflows.id", ondelete="CASCADE"),

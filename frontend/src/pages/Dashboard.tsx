@@ -1,5 +1,5 @@
-import { type FormEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api";
 import { timeAgo } from "../components/agents";
 import { ApprovalCard, TRACE_AGENTS, TraceFeed } from "../components/trace";
@@ -8,7 +8,7 @@ import { useAction, useAsync } from "../components/useAsync";
 import type { Analytics, ApprovalItem, Campaign, TraceEvent, WorkflowSummary } from "../types";
 
 const STATUS_AGENTS = ["orchestrator", "research", "qualification", "outreach", "safety", "email_intelligence",
-  "followup", "analytics", "support", "memory"];
+  "followup", "analytics", "support", "access", "memory"];
 
 function agentState(events: TraceEvent[]): { label: string; tone: string; last?: TraceEvent } {
   const last = events[0];
@@ -25,15 +25,17 @@ export default function Dashboard() {
   const trace = useAsync(() => api.get<TraceEvent[]>("/trace?limit=200"));
   const approvals = useAsync(() => api.get<ApprovalItem[]>("/approvals?status=PENDING"));
   const campaigns = useAsync(() => api.get<Campaign[]>("/campaigns"));
-  const goals = useAsync(() => api.get<WorkflowSummary[]>("/workflows?workflow_type=GOAL&top_level=true&limit=3"));
+  const goals = useAsync(() => api.get<WorkflowSummary[]>("/workflows?workflow_type=GOAL&top_level=true&limit=5"));
   const m = analytics.data?.overall;
   const lc = analytics.data?.lifecycle;
 
-  function reloadAll() {
+  const reloadAll = useCallback(() => {
     approvals.reload();
     trace.reload();
     analytics.reload();
-  }
+    goals.reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <>
@@ -41,7 +43,7 @@ export default function Dashboard() {
       <p className="muted page-sub">AI handles the routine and surfaces what's important. You make the important decisions.</p>
       <ErrorBanner error={analytics.error ?? trace.error ?? approvals.error} />
 
-      <GoalLauncher campaigns={campaigns.data ?? []} />
+      <GoalLauncher campaigns={campaigns.data ?? []} onLaunched={reloadAll} />
 
       {m && lc && (
         <div className="stats">
@@ -86,7 +88,7 @@ export default function Dashboard() {
               })}
             </ul>
           </Card>
-          <Card title="Recent goals">
+          <Card title="Recent commands">
             {goals.data?.length === 0 && <Empty>No goals yet.</Empty>}
             <ul className="list">
               {goals.data?.map((g) => (
@@ -113,35 +115,97 @@ export default function Dashboard() {
   );
 }
 
-function GoalLauncher({ campaigns }: { campaigns: Campaign[] }) {
-  const [goal, setGoal] = useState("Find high-quality customers for our business");
+interface CommandInfo { key: string; label: string; description: string; plan: string[]; examples: string[]; needs_campaign: boolean }
+interface RoutePreview { command: CommandInfo | null; matched: string[] }
+
+function GoalLauncher({ campaigns, onLaunched }: { campaigns: Campaign[]; onLaunched: () => void }) {
+  const commands = useAsync(() => api.get<CommandInfo[]>("/workflows/commands"));
+  const [goal, setGoal] = useState("");
+  const [preview, setPreview] = useState<RoutePreview | null>(null);
   const [campaignId, setCampaignId] = useState("");
+  const [launched, setLaunched] = useState<WorkflowSummary[]>([]);
   const action = useAction();
-  const navigate = useNavigate();
   const selected = campaignId || campaigns.find((c) => c.status === "ACTIVE")?.id || "";
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const wf = await action.run("goal", () => api.post<WorkflowSummary>("/workflows/goal", { goal, campaign_id: selected }));
-    if (wf) navigate(`/workflows/${wf.id}`);
+  // Live, deterministic preview of which workflow the Orchestrator will run.
+  useEffect(() => {
+    if (goal.trim().length < 3) { setPreview(null); return; }
+    const t = window.setTimeout(() => {
+      api.get<RoutePreview>(`/workflows/route?text=${encodeURIComponent(goal)}`).then(setPreview).catch(() => undefined);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [goal]);
+
+  // Keep launched commands' status fresh while any is still running.
+  useEffect(() => {
+    const running = launched.some((w) => !["COMPLETED", "BLOCKED", "FAILED", "AWAITING_APPROVAL", "ESCALATED"].includes(w.state));
+    if (!running) return;
+    const t = window.setTimeout(async () => {
+      const fresh = await Promise.all(launched.map((w) => api.get<WorkflowSummary>(`/workflows/${w.id}`).catch(() => w)));
+      setLaunched(fresh);
+      onLaunched();
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [launched, onLaunched]);
+
+  async function submit(text: string, commandKey?: string) {
+    const needsCampaign = (commandKey ? commands.data?.find((c) => c.key === commandKey) : preview?.command)?.needs_campaign;
+    const wf = await action.run("goal", () => api.post<WorkflowSummary>("/workflows/goal", {
+      goal: text, command: commandKey, campaign_id: needsCampaign ? selected || null : null,
+    }));
+    if (wf) {
+      setLaunched((prev) => [wf, ...prev].slice(0, 6));
+      // Only clear the box if it still holds what was submitted (don't wipe something typed meanwhile).
+      setGoal((current) => (current === text ? "" : current));
+      onLaunched();
+    }
   }
 
+  const suggestions = (commands.data ?? []).flatMap((c) => c.examples.slice(0, 1).map((e) => ({ text: e, key: c.key, label: c.label })));
+  const willRun = preview?.command;
   return (
-    <form className="card goal-launcher" onSubmit={submit}>
+    <section className="card goal-launcher">
       <div className="goal-label">
         <span className="kind-chip agent">Orchestrator</span>
-        <b>Give GrowthOS a goal</b>
-        <span className="muted small">The Orchestrator plans it, runs the specialist agents on the campaign's prospects, and brings you only the decisions that need a human.</span>
+        <b>Tell GrowthOS what to do</b>
+        <span className="muted small">Type a command or pick a suggestion. The Orchestrator maps it to a known workflow (no guessing), runs the agents, and brings you only the decisions that need a human. You can run several commands at once.</span>
       </div>
-      <div className="goal-row">
-        <input value={goal} onChange={(e) => setGoal(e.target.value)} required />
-        <select value={selected} onChange={(e) => setCampaignId(e.target.value)} required>
-          {campaigns.length === 0 && <option value="">Create a campaign first</option>}
-          {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.leads} prospects)</option>)}
-        </select>
-        <button className="primary" disabled={!!action.busy || !selected}>{action.busy ? "Starting…" : "▶ Run"}</button>
+      <form className="goal-row" onSubmit={(e) => { e.preventDefault(); void submit(goal); }}>
+        <input value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="e.g. Follow up with leads who haven't replied" required />
+        {willRun?.needs_campaign && (
+          <select value={selected} onChange={(e) => setCampaignId(e.target.value)} required>
+            {campaigns.length === 0 && <option value="">Create a campaign first</option>}
+            {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.leads} prospects)</option>)}
+          </select>
+        )}
+        <button className="primary" disabled={!!action.busy || !willRun || (willRun.needs_campaign && !selected)}>▶ Run</button>
+      </form>
+      {goal.trim().length >= 3 && preview && (
+        willRun ? (
+          <p className="route-preview small">→ Will run <b>{willRun.label}</b>: {willRun.description} <span className="muted">(matched: {preview.matched.join(", ")})</span></p>
+        ) : (
+          <p className="route-preview small unknown">I can't map that to a safe workflow yet. Try one of the suggestions below.</p>
+        )
+      )}
+      <div className="suggestions">
+        {suggestions.map((s) => (
+          <button key={s.key} type="button" className="chip" title={s.label} disabled={!!action.busy}
+                  onClick={() => (commands.data?.find((c) => c.key === s.key)?.needs_campaign && !selected) ? setGoal(s.text) : void submit(s.text, s.key)}>
+            {s.text}
+          </button>
+        ))}
       </div>
-      <ErrorBanner error={action.error} />
-    </form>
+      <ErrorBanner error={action.error} onClose={() => action.setError(null)} />
+      {launched.length > 0 && (
+        <ul className="list launched">
+          {launched.map((w) => (
+            <li key={w.id}>
+              <span><b>{w.goal}</b> <span className="muted small">· {commands.data?.find((c) => c.key === w.command)?.label ?? w.command}</span></span>
+              <span className="actions"><Badge value={w.state === "AWAITING_APPROVAL" ? "WAITING" : w.state} /><Link to={`/workflows/${w.id}`}>Trace →</Link></span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

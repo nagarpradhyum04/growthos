@@ -190,7 +190,7 @@ def compute_analytics(db: Session, organization_id: uuid.UUID) -> dict:
     }
 
 
-def generate_insights(db: Session, organization_id: uuid.UUID, container: Container) -> dict:
+def generate_insights(db: Session, organization_id: uuid.UUID, container: Container, workflow=None) -> dict:
     """Analytics Agent explains real metrics; its learnings are stored in shared memory (category=insight),
     where future Outreach runs read them. Numbers the agent did not get from the data are rejected."""
     from app.models.enums import TraceStatus, WorkflowState, WorkflowType
@@ -208,7 +208,8 @@ def generate_insights(db: Session, organization_id: uuid.UUID, container: Contai
                     "reply_rate_pct": c["reply_rate_pct"], "personalized_pct": c["personalized_pct"],
                     "conversions": c["conversions"]}
                    for c in metrics["campaigns"] if c["emails_sent"] > 0]
-    wf = wfs.start_workflow(db, organization_id, WorkflowType.GOAL, goal="Analyze performance and learn")
+    wf = workflow or wfs.start_workflow(db, organization_id, WorkflowType.GOAL, goal="Analyze performance and learn",
+                                        command="insights")
     wfs.record(db, wf, "analytics", "Compute metrics (deterministic)", TraceStatus.COMPLETED,
                f"{metrics['overall']['emails_sent']} emails, {metrics['overall']['replies']} replies, "
                f"{len(comparisons)} campaign(s) with sends")

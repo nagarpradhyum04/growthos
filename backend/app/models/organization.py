@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
@@ -6,10 +7,19 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, OrgScoped, Timestamps, UUIDPk
 
 
+_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I to avoid typos
+
+
+def new_business_code() -> str:
+    return "GOS-" + "".join(secrets.choice(_CODE_ALPHABET) for _ in range(6))
+
+
 class Organization(UUIDPk, Timestamps, Base):
     __tablename__ = "organizations"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Public Business ID the owner shares with customers; required to sign in to the customer portal.
+    business_code: Mapped[str] = mapped_column(String(20), unique=True, default=new_business_code, nullable=False)
     # Off by default: every email needs a human approval. When enabled, generated
     # follow-ups are approved and sent automatically (still through can_send()).
     automated_sending_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

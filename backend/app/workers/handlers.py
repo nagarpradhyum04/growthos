@@ -41,7 +41,7 @@ def run_goal(db: Session, job: Job) -> dict:
     from app.models import Workflow
 
     wf = get_owned(db, Workflow, uuid.UUID(job.payload["workflow_id"]), job.organization_id)
-    return Orchestrator(db, get_container()).run_goal(wf, int(job.payload.get("max_leads", 25)))
+    return Orchestrator(db, get_container()).run_command(wf, int(job.payload.get("max_leads", 25)))
 
 
 HANDLERS = {

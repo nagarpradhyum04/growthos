@@ -21,6 +21,7 @@ from app.api import (
     organization,
     policy,
     portal,
+    portal_auth,
     products,
     public,
     replies,
@@ -38,7 +39,7 @@ logger = logging.getLogger("growthos.api")
 app = FastAPI(title="GrowthOS API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=get_settings().cors_origin_list,
+    allow_origins=get_settings().cors_origin_list + [get_settings().portal_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -86,5 +87,5 @@ def health():
 
 
 for module in (auth, organization, campaigns, leads, emails, replies, contacts, analytics, system, public, webhooks,
-               workflows, approvals, memory, policy, customers, products, care, portal):
+               workflows, approvals, memory, policy, customers, products, care, portal, portal_auth):
     app.include_router(module.router)

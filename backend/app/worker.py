@@ -4,6 +4,7 @@ Loop: recover stale jobs -> process due follow-ups -> run queued jobs -> sleep.
 """
 import logging
 import signal
+import threading
 import time
 
 from sqlalchemy import select
@@ -56,12 +57,32 @@ def run_once(max_jobs: int = 20) -> dict:
     return stats
 
 
+def _job_loop(index: int, poll: float) -> None:
+    """Extra job runners so a long command (e.g. a big prospect run) doesn't block other commands.
+    Jobs are claimed with SELECT ... FOR UPDATE SKIP LOCKED, so runners never take the same job."""
+    while _running:
+        ran = 0
+        with SessionLocal() as db:
+            for _ in range(20):
+                job = jobs.claim_next(db)
+                if job is None:
+                    break
+                jobs.execute(db, job, HANDLERS)
+                ran += 1
+        if not ran:
+            time.sleep(poll)
+
+
 def main() -> None:
     configure_logging()
     signal.signal(signal.SIGINT, _stop)
     signal.signal(signal.SIGTERM, _stop)
-    poll = get_settings().worker_poll_seconds
-    logger.info("GrowthOS worker started (poll every %.0fs)", poll)
+    settings = get_settings()
+    poll = settings.worker_poll_seconds
+    extra = max(0, settings.worker_concurrency - 1)
+    for i in range(extra):
+        threading.Thread(target=_job_loop, args=(i + 1, poll), daemon=True, name=f"job-runner-{i + 1}").start()
+    logger.info("GrowthOS worker started (poll every %.0fs, %d job runner(s))", poll, extra + 1)
     while _running:
         stats = run_once()
         if stats["jobs"] or stats["followups"]:

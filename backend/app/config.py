@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-insecure-secret-change-me"
     jwt_expiry_minutes: int = 60 * 12
     public_base_url: str = "http://localhost:8000"
+    # Where customers sign in (separate frontend, same API and database).
+    portal_url: str = "http://localhost:5174"
+    portal_code_ttl_minutes: int = 10
     cors_origins: str = "http://localhost:5173"
     # Shared secret required in the X-Webhook-Secret header of inbound webhooks.
     webhook_secret: str = ""
@@ -47,6 +50,8 @@ class Settings(BaseSettings):
 
     # Worker
     worker_poll_seconds: float = 5.0
+    # Parallel job runners in one worker process (commands run side by side).
+    worker_concurrency: int = 3
 
     @property
     def cors_origin_list(self) -> list[str]:

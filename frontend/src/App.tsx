@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { api, auth } from "./api";
 import type { Me } from "./types";
-import Portal from "./portal/Portal";
 import Analytics from "./pages/Analytics";
 import Approvals from "./pages/Approvals";
 import Care from "./pages/Care";
@@ -29,7 +28,7 @@ const NAV: [string, string][] = [
   ["/campaigns", "Campaigns"],
   ["/emails", "Email Review"],
   ["/inbox", "Inbox"],
-  ["§Customers", ""],
+  ["§Customer care", ""],
   ["/customers", "Customers"],
   ["/care", "Warranty & Service"],
   ["/products", "Products & Knowledge"],
@@ -116,21 +115,15 @@ function Shell() {
 }
 
 // Reads the token at render time (not when App first rendered), so login/logout take effect immediately.
+// Business-owner app only. Customers use the separate customer portal app (see vite.portal.config.ts).
 function RequireAuth() {
-  if (!auth.token) return <Navigate to="/login" replace />;
-  return auth.role === "customer" ? <Navigate to="/portal" replace /> : <Shell />;
-}
-
-function RequireCustomer() {
-  if (!auth.token) return <Navigate to="/login" replace />;
-  return auth.role === "customer" ? <Portal /> : <Navigate to="/" replace />;
+  return auth.token && auth.role === "owner" ? <Shell /> : <Navigate to="/login" replace />;
 }
 
 export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      <Route path="/portal/*" element={<RequireCustomer />} />
       <Route path="/*" element={<RequireAuth />} />
     </Routes>
   );

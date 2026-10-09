@@ -3,6 +3,7 @@ import { api } from "../api";
 import { Card, ErrorBanner, Notice } from "../components/ui";
 import { useAction, useAsync } from "../components/useAsync";
 import type { Me, Policy } from "../types";
+import { BusinessIdBanner } from "./Customers";
 
 interface Profile {
   company_name: string;
@@ -88,6 +89,7 @@ export default function Settings() {
           <div className="span-2"><button className="primary" disabled={!!action.busy}>Save profile</button></div>
         </form>
       </Card>
+      <BusinessIdBanner />
       <PolicyCard />
       {me.data && (
         <Card title="Sending mode">

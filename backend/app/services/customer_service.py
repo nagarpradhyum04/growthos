@@ -6,13 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.errors import ConflictError, InvalidStateError
-from app.models import Contact, Customer, Lead, Notification, Product, Purchase, User
-from app.models.enums import LeadStatus, TraceStatus, UserRole, WorkflowState
-from app.security import hash_password
+from app.models import Contact, Customer, Lead, Notification, Product, Purchase
+from app.models.enums import LeadStatus, TraceStatus, WorkflowState
 from app.services import memory_service
 from app.services import workflow_service as wfs
 from app.services.common import get_owned
-from app.services.suppression import hash_email, is_suppressed, normalize_email
+from app.services.suppression import hash_email, normalize_email
 
 
 def add_months(d: date, months: int) -> date:
@@ -92,22 +91,6 @@ def add_purchase(db: Session, customer: Customer, *, product_id, purchased_at: d
                         title=f"{product.name} added to your products", link="/portal/products"))
     db.flush()
     return purchase
-
-
-def grant_portal_access(db: Session, customer: Customer, password: str) -> User:
-    if is_suppressed(db, customer.organization_id, customer.email_hash):
-        raise InvalidStateError("This customer asked not to be contacted.")
-    user = db.scalar(select(User).where(User.email == customer.email))
-    if user and (user.role != UserRole.CUSTOMER.value or user.customer_id != customer.id):
-        raise ConflictError("This email is already used by another account.")
-    if user is None:
-        user = User(organization_id=customer.organization_id, email=customer.email, name=customer.name,
-                    role=UserRole.CUSTOMER.value, customer_id=customer.id, password_hash=hash_password(password))
-        db.add(user)
-    else:
-        user.password_hash = hash_password(password)
-    db.flush()
-    return user
 
 
 def warranty_state(purchase: Purchase, today: date | None = None) -> dict:
