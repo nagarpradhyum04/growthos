@@ -254,11 +254,12 @@ class Orchestrator:
         return stats
 
     # ------------------------------------------------------------------ commands
-    def run_command(self, wf: Workflow, max_leads: int = 25) -> dict:
+    def run_command(self, wf: Workflow, max_leads: int = 25, options: dict | None = None) -> dict:
         """Dispatch a business command (see command_router) to its workflow. Unknown commands never get here."""
         handlers = {"acquire": lambda: self.run_goal(wf, max_leads), "followups": lambda: self._cmd_followups(wf),
                     "inbox": lambda: self._cmd_inbox(wf), "approvals": lambda: self._cmd_approvals(wf),
-                    "lifecycle": lambda: self._cmd_lifecycle(wf), "insights": lambda: self._cmd_insights(wf)}
+                    "lifecycle": lambda: self._cmd_lifecycle(wf), "insights": lambda: self._cmd_insights(wf),
+                    "social": lambda: self._cmd_social(wf, options or {})}
         try:
             return handlers[wf.command or "acquire"]()
         except GrowthOSError as exc:
@@ -371,6 +372,16 @@ class Orchestrator:
         self._understood(wf, "analyze performance and store learnings in shared memory")
         out = analytics_service.generate_insights(self.db, wf.organization_id, self.container, workflow=wf)
         return self._finish(wf, {"insights_stored": len(out["stored_insights"])}, WorkflowState.COMPLETED)
+
+    def _cmd_social(self, wf: Workflow, options: dict) -> dict:
+        from datetime import date
+
+        from app.services import social_service
+
+        week = date.fromisoformat(options["week_start"]) if options.get("week_start") else None
+        self._understood(wf, "write this week's image + video posts, generate media, check rules, then wait for approval")
+        return social_service.generate_week(self.db, self.container, wf.organization_id, week=week,
+                                            regenerate=bool(options.get("regenerate")), wf=wf)
 
     # ------------------------------------------------------------------ helpers
     def _agent_step(self, wf: Workflow, result: WorkflowResult, step: str, action: str, state: WorkflowState,

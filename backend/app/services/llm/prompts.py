@@ -20,6 +20,7 @@ ACTIVE_PROMPT_VERSIONS: dict[str, str] = {
     "email_intelligence": "v1",
     "support": "v1",
     "lifecycle": "v1",
+    "social": "v1",
 }
 
 

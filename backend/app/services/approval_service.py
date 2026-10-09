@@ -16,12 +16,12 @@ def create(db: Session, organization_id: uuid.UUID, approval_type: ApprovalType,
     stmt = select(Approval).where(Approval.organization_id == organization_id,
                                   Approval.approval_type == approval_type,
                                   Approval.status == ApprovalStatus.PENDING)
-    for key in ("email_id", "reply_id", "message_id", "warranty_claim_id", "service_request_id"):
+    for key in ("email_id", "reply_id", "message_id", "warranty_claim_id", "service_request_id", "social_post_id"):
         if refs.get(key):
             stmt = stmt.where(getattr(Approval, key) == refs[key])
             break
     existing = db.scalar(stmt) if any(refs.get(k) for k in ("email_id", "reply_id", "message_id",
-                                                            "warranty_claim_id", "service_request_id")) else None
+                                                            "warranty_claim_id", "service_request_id", "social_post_id")) else None
     approval = existing or Approval(organization_id=organization_id, approval_type=approval_type)
     approval.title = title[:300]
     approval.reason = reason

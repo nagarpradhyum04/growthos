@@ -6,6 +6,7 @@ from app.api.deps import CurrentUser, current_user
 from app.db import get_db
 from app.errors import InvalidStateError
 from app.services.escalation import RED
+from app.services.social_service import PLATFORM_CAPTION_LIMITS
 from app.services.policy import get_or_create_policy, get_policy
 
 router = APIRouter(prefix="/policy", tags=["policy"])
@@ -23,6 +24,8 @@ class PolicyIn(BaseModel):
     lifecycle_enabled: bool
     lifecycle_rules: dict[str, int]
     lifecycle_max_per_7d: int = Field(ge=0, le=20)
+    social_weekly_enabled: bool = True
+    social_platforms: list[str] = Field(default_factory=lambda: ["instagram", "linkedin", "facebook"], max_length=5)
 
 
 def policy_dict(p) -> dict:
@@ -42,6 +45,9 @@ def update_policy(body: PolicyIn, cu: CurrentUser = Depends(current_user), db: S
             raise InvalidStateError(f"Rule for {category} must be 'escalate' or 'automate'.")
         if category in RED and mode != "escalate":
             raise InvalidStateError(f"{category} must always be escalated to a human.")
+    unknown = [x for x in body.social_platforms if x not in PLATFORM_CAPTION_LIMITS]
+    if unknown:
+        raise InvalidStateError(f"Unsupported social platform(s): {', '.join(unknown)}")
     p = get_or_create_policy(db, cu.org_id)
     for key, value in body.model_dump().items():
         setattr(p, key, [v.strip() for v in value if v.strip()] if isinstance(value, list) else value)

@@ -51,3 +51,7 @@ class BusinessPolicy(UUIDPk, Timestamps, Base):
     lifecycle_rules: Mapped[dict] = mapped_column(JSON, default=lambda: dict(DEFAULT_LIFECYCLE_RULES),
                                                   nullable=False)
     lifecycle_max_per_7d: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    # Weekly social promotion: 1 static + 1 video post drafted every week (never auto-published).
+    social_weekly_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true", nullable=False)
+    social_platforms: Mapped[list] = mapped_column(JSON, default=lambda: ["instagram", "linkedin", "facebook"],
+                                                   server_default='["instagram", "linkedin", "facebook"]', nullable=False)

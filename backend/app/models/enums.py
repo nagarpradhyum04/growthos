@@ -88,6 +88,7 @@ class WorkflowType(StrEnum):
     LEAD = "LEAD"  # one lead's journey from research to reply
     INBOUND = "INBOUND"  # an incoming email / customer message
     LIFECYCLE = "LIFECYCLE"  # post-purchase customer journey
+    SOCIAL = "SOCIAL"  # weekly social media promotion posts
 
 
 class WorkflowState(StrEnum):
@@ -135,6 +136,7 @@ class ApprovalType(StrEnum):
     MESSAGE_ESCALATION = "MESSAGE_ESCALATION"
     WARRANTY_CLAIM = "WARRANTY_CLAIM"
     SERVICE_REQUEST = "SERVICE_REQUEST"
+    SOCIAL_POST = "SOCIAL_POST"
 
 
 class ApprovalStatus(StrEnum):

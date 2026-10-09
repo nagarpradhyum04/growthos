@@ -12,6 +12,9 @@ os.environ["WEBHOOK_SECRET"] = "test-webhook-secret"
 os.environ["MAX_FOLLOWUPS"] = "2"
 os.environ["FOLLOWUP_DELAY_DAYS"] = "3"
 os.environ["QUALIFICATION_THRESHOLD"] = "60"
+os.environ["MEDIA_PROVIDER"] = "mock"
+os.environ["SOCIAL_AUTO_WEEKLY"] = "false"  # tests call social_service.schedule_weekly directly
+os.environ.setdefault("MEDIA_DIR", os.path.join(__import__("tempfile").gettempdir(), "growthos-test-media"))
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

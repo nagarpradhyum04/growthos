@@ -64,3 +64,50 @@ class LifecycleAgent(BaseAgent):
         r = self.llm.run_structured(agent_name=self.name, prompt_name=self.prompt_name, input_data=context,
                                     output_schema=LifecycleMessageOutput, ctx=ctx)
         return AgentOutput(r.output, r.run_id)
+
+
+_PRICE_RE = re.compile(r"[$€£₹]\s?\d|\b\d+\s?%\s?off\b|\bdiscount\b|\bfree\b|\bsale\b", re.IGNORECASE)
+_SUPERLATIVE_RE = re.compile(r"\b(?:#1|number one|best in the world|guaranteed|100% (?:safe|secure|effective))\b",
+                             re.IGNORECASE)
+
+
+def social_claim_problems(text: str, facts: str) -> list[str]:
+    """Deterministic claim checks for promotional copy. `facts` is everything the business told us
+    (profile + product catalogue); offers, prices or absolute claims must appear there to be used."""
+    problems = []
+    lowered = facts.lower()
+    for m in _PRICE_RE.finditer(text):
+        token = m.group(0).strip().lower()
+        if token not in lowered:
+            problems.append(f"mentions an offer/price ('{m.group(0).strip()}') that is not in the business facts")
+    for m in _SUPERLATIVE_RE.finditer(text):
+        if m.group(0).lower() not in lowered:
+            problems.append(f"makes an absolute claim ('{m.group(0)}') the business has not stated")
+    numbers = set(_NUMBER_RE.findall(text)) - set(_NUMBER_RE.findall(facts))
+    if numbers:
+        problems.append(f"uses numbers not found in the business facts: {', '.join(sorted(numbers))}")
+    return problems
+
+
+class SocialContentAgent(BaseAgent):
+    """Writes one week's promotion: a static image post and a short video post, from business facts only.
+    The visual/video prompts it writes are handed to the media provider (Nano Banana / Veo)."""
+
+    name = "social"
+    prompt_name = "social"
+
+    def run(self, context: dict, ctx: RunContext | None = None) -> AgentOutput:
+        from app.services.agents.schemas import SocialWeekOutput
+
+        facts = json.dumps(context.get("business_profile", {})) + " " + json.dumps(context.get("products", []))
+
+        def validate(out: SocialWeekOutput) -> list[str]:
+            problems = []
+            for label, text in (("image caption", out.image_post.caption), ("image headline", out.image_post.headline),
+                                ("video caption", out.video_post.caption)):
+                problems += [f"{label}: {p}" for p in social_claim_problems(text, facts)]
+            return problems
+
+        r = self.llm.run_structured(agent_name=self.name, prompt_name=self.prompt_name, input_data=context,
+                                    output_schema=SocialWeekOutput, ctx=ctx, validator=validate)
+        return AgentOutput(r.output, r.run_id)

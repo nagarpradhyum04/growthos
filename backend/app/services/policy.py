@@ -22,7 +22,7 @@ def default_policy(organization_id: uuid.UUID) -> BusinessPolicy:
         blocked_domains=[], banned_phrases=list(DEFAULT_BANNED_PHRASES),
         escalation_rules=dict(DEFAULT_ESCALATION_RULES), large_order_threshold=10000, auto_handle_routine=True,
         warranty_auto_approve=False, lifecycle_enabled=True, lifecycle_rules=dict(DEFAULT_LIFECYCLE_RULES),
-        lifecycle_max_per_7d=1,
+        lifecycle_max_per_7d=1, social_weekly_enabled=True, social_platforms=["instagram", "linkedin", "facebook"],
     )
 
 

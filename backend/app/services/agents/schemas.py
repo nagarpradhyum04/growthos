@@ -157,3 +157,45 @@ class AnalyticsOutput(BaseModel):
     what_worked: list[str] = Field(default_factory=list, max_length=8)
     what_did_not_work: list[str] = Field(default_factory=list, max_length=8)
     recommendations: list[str] = Field(default_factory=list, max_length=8)
+
+
+# ---------------- Social content (weekly promotion posts) ----------------
+_HASHTAG_RE = re.compile(r"^#?[A-Za-z0-9_]{2,40}$")
+
+
+class _SocialPostBase(BaseModel):
+    caption: str = Field(min_length=20, max_length=1200)
+    hashtags: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("caption")
+    @classmethod
+    def _caption_ok(cls, v: str) -> str:
+        if _PLACEHOLDER_RE.search(v):
+            raise ValueError("contains an unfilled template placeholder")
+        return v.strip()
+
+    @field_validator("hashtags")
+    @classmethod
+    def _tags_ok(cls, v: list[str]) -> list[str]:
+        out = []
+        for tag in v:
+            tag = tag.strip()
+            if not _HASHTAG_RE.match(tag):
+                raise ValueError(f"invalid hashtag '{tag}'")
+            out.append(tag if tag.startswith("#") else f"#{tag}")
+        return out
+
+
+class SocialImagePost(_SocialPostBase):
+    headline: str = Field(min_length=3, max_length=80)
+    visual_prompt: str = Field(min_length=20, max_length=1500)
+
+
+class SocialVideoPost(_SocialPostBase):
+    video_prompt: str = Field(min_length=20, max_length=1500)
+
+
+class SocialWeekOutput(BaseModel):
+    theme: str = Field(min_length=3, max_length=200)
+    image_post: SocialImagePost
+    video_post: SocialVideoPost

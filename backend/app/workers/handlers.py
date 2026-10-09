@@ -41,7 +41,20 @@ def run_goal(db: Session, job: Job) -> dict:
     from app.models import Workflow
 
     wf = get_owned(db, Workflow, uuid.UUID(job.payload["workflow_id"]), job.organization_id)
-    return Orchestrator(db, get_container()).run_command(wf, int(job.payload.get("max_leads", 25)))
+    return Orchestrator(db, get_container()).run_command(wf, int(job.payload.get("max_leads", 25)),
+                                                         options=job.payload.get("options"))
+
+
+def generate_social_week(db: Session, job: Job) -> dict:
+    """Weekly auto-generation (scheduled by the worker). Runs through the Orchestrator like a typed command."""
+    from app.models.enums import WorkflowType
+    from app.services import workflow_service as wfs
+    from app.services.command_router import BY_KEY
+
+    wf = wfs.start_workflow(db, job.organization_id, WorkflowType.GOAL, goal="Weekly social posts (automatic)",
+                            plan=list(BY_KEY["social"].plan), command="social")
+    db.commit()
+    return Orchestrator(db, get_container()).run_command(wf, options={"week_start": job.payload.get("week_start")})
 
 
 HANDLERS = {
@@ -50,4 +63,5 @@ HANDLERS = {
     "analyze_reply": analyze_reply,
     "send_scheduled_email": send_scheduled_email,
     "generate_insights": generate_insights,
+    "generate_social_week": generate_social_week,
 }

@@ -48,6 +48,14 @@ def run_once(max_jobs: int = 20) -> dict:
         except Exception:  # noqa: BLE001
             db.rollback()
             logger.exception("Lifecycle processing failed")
+        try:
+            from app.services.social_service import schedule_weekly
+
+            if get_settings().social_auto_weekly and (queued := schedule_weekly(db)):
+                stats["social_weeks_queued"] = queued
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            logger.exception("Weekly social scheduling failed")
         for _ in range(max_jobs):
             job = jobs.claim_next(db)
             if job is None:

@@ -25,6 +25,7 @@ from app.api import (
     products,
     public,
     replies,
+    social,
     system,
     webhooks,
     workflows,
@@ -87,5 +88,5 @@ def health():
 
 
 for module in (auth, organization, campaigns, leads, emails, replies, contacts, analytics, system, public, webhooks,
-               workflows, approvals, memory, policy, customers, products, care, portal, portal_auth):
+               workflows, approvals, memory, policy, customers, products, care, portal, portal_auth, social):
     app.include_router(module.router)

@@ -11,6 +11,7 @@ from app.services.agents import (
     ResearchAgent,
 )
 from app.services.email import EmailProvider, build_email_provider
+from app.services.media import MediaProvider, build_media_provider
 from app.services.llm.service import LLMService, build_llm_service
 from app.services.search import ResearchTools, build_research_tools
 
@@ -21,6 +22,7 @@ class Container:
     llm: LLMService
     research_tools: ResearchTools
     email_provider: EmailProvider
+    media_provider: MediaProvider | None = None
 
     # Agents are cheap wrappers; build on demand so they always use the current adapters.
     def research_agent(self) -> ResearchAgent:
@@ -55,6 +57,16 @@ class Container:
         from app.services.agents.customer_agents import LifecycleAgent
 
         return LifecycleAgent(self.llm)
+
+    def social_agent(self):
+        from app.services.agents.customer_agents import SocialContentAgent
+
+        return SocialContentAgent(self.llm)
+
+    def media(self) -> MediaProvider:
+        if self.media_provider is None:
+            self.media_provider = build_media_provider(self.settings)
+        return self.media_provider
 
 
 _container: Container | None = None

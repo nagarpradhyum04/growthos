@@ -37,6 +37,8 @@ class Approval(UUIDPk, Timestamps, OrgScoped, Base):
         ForeignKey("warranty_claims.id", ondelete="CASCADE"), nullable=True)
     service_request_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("service_requests.id", ondelete="CASCADE"), nullable=True)
+    social_post_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("social_posts.id", ondelete="CASCADE"),
+                                                             nullable=True)
     workflow_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("workflows.id", ondelete="SET NULL"),
                                                           nullable=True)
 

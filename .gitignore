@@ -20,3 +20,4 @@ frontend/dist-portal/
 .DS_Store
 evals/results/
 backend/evals/results/
+backend/media/

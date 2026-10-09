@@ -355,6 +355,49 @@ class MockLLMProvider(LLMProvider):
         subject, body = lines.get(event, (f"About your {product}", f"Hi {customer}, just checking in on your {product}."))
         return {"subject": subject, "body": f"{body}\n\n{business}"}
 
+    # ---------------- social ----------------
+    def _social(self, data: dict) -> dict:
+        profile = data.get("business_profile") or {}
+        company = profile.get("company_name") or "our team"
+        used = {t.lower() for t in data.get("previous_themes") or []}
+        candidates = [f"Spotlight: {p['name']}" for p in data.get("products") or [] if p.get("name")]
+        if profile.get("value_proposition"):
+            candidates.append(f"Why {company}")
+        if profile.get("key_differentiators"):
+            candidates.append(f"What makes {company} different")
+        candidates.append(f"Meet {company}")
+        theme = next((c for c in candidates if c.lower() not in used), candidates[0])
+        product = next((p for p in data.get("products") or [] if theme.endswith(p.get("name", "\0"))), None)
+        about = (product or {}).get("description") or profile.get("value_proposition") \
+            or profile.get("company_description") or ""
+        about = _sentences(about)[0] if _sentences(about) else about
+        cta = f"Learn more at {profile['website']}." if profile.get("website") else "Message us to learn more."
+        subject = product["name"] if product else company
+        tags = ["#" + re.sub(r"[^A-Za-z0-9]", "", w) for w in [subject, *(profile.get("industries") or [])][:4]]
+        tags = [t for t in tags if len(t) > 2] or ["#SmallBusiness"]
+        image_caption = f"This week at {company}: {theme}. {about} {cta}"
+        video_caption = f"{theme} — a quick look. {about} Tell us what you think in the comments. {cta}"
+        style = (profile.get("tone") or "friendly, professional")
+        return {
+            "theme": theme,
+            "image_post": {
+                "headline": theme[:80],
+                "caption": image_caption,
+                "hashtags": tags,
+                "visual_prompt": f"Clean editorial product photograph for {company} promoting '{subject}'. "
+                                 f"{about} Soft natural light, neutral beige background, generous negative "
+                                 f"space for the headline, {style} mood.",
+            },
+            "video_post": {
+                "caption": video_caption,
+                "hashtags": tags,
+                "video_prompt": f"Scene 1: slow push-in on {subject} in a calm, well-lit setting. "
+                                f"Scene 2: close-up detail shots showing how it is used. "
+                                f"Scene 3: wide shot ending on a clean frame for the {company} name. "
+                                f"Mood: {style}. Vertical 9:16, about 8 seconds.",
+            },
+        }
+
     # ---------------- analytics ----------------
     def _analytics(self, data: dict) -> dict:
         m = data.get("metrics", {}).get("overall", {})

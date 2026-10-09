@@ -90,7 +90,7 @@ def test_opted_out_customer_is_denied(client, auth, campaign, lead):
 # ---------------- Orchestrator commands ----------------
 def test_commands_are_listed_and_routed(client, auth):
     cmds = client.get("/workflows/commands", headers=auth).json()
-    assert {c["key"] for c in cmds} == {"acquire", "followups", "inbox", "approvals", "lifecycle", "insights"}
+    assert {c["key"] for c in cmds} == {"acquire", "followups", "inbox", "approvals", "lifecycle", "social", "insights"}
     assert all(c["examples"] for c in cmds)
     r = client.get("/workflows/route", headers=auth, params={"text": "Follow up with leads who haven't replied"}).json()
     assert r["command"]["key"] == "followups" and "follow up" in r["matched"]

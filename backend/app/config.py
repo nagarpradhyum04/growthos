@@ -38,6 +38,18 @@ class Settings(BaseSettings):
     email_api_key: str = ""
     email_from_address: str = ""
 
+    # Social media generation: "gemini" (Nano Banana images + Veo video) or "mock" (offline previews)
+    media_provider: str = "mock"
+    gemini_api_key: str = ""
+    gemini_image_model: str = "gemini-2.5-flash-image"
+    gemini_video_model: str = "veo-3.1-generate-preview"
+    social_image_aspect: str = "1:1"
+    social_video_aspect: str = "9:16"
+    media_dir: str = str(REPO_ROOT / "backend" / "media")
+    video_timeout_seconds: int = 600
+    # Worker queues one image + one video post per org each week (posts still need human approval).
+    social_auto_weekly: bool = True
+
     # Research
     search_provider: str = "none"
     search_api_key: str = ""

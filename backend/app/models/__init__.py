@@ -16,6 +16,7 @@ from app.models.knowledge import KnowledgeChunk, KnowledgeDocument
 from app.models.memory import MemoryEntry
 from app.models.policy import BusinessPolicy
 from app.models.portal_access import PortalAccessRequest
+from app.models.social import SocialPost
 from app.models.workflow import Workflow, WorkflowEvent
 from app.models.base import Base
 from app.models.campaign import Campaign
@@ -41,6 +42,7 @@ __all__ = [
     "Product",
     "Purchase",
     "ServiceRequest",
+    "SocialPost",
     "WarrantyClaim",
     "Workflow",
     "WorkflowEvent",
