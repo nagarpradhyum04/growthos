@@ -273,7 +273,7 @@ and still goes through `can_send()`.
 
 ```bash
 cd backend
-TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/growthos_test pytest
+TEST_DATABASE_URL=postgresql+psycopg://postgres:postgres@127.0.0.1:5432/growthos_test pytest
 ```
 
 Tests run against a real PostgreSQL database (`growthos_test`) with mock adapters. They cover:
@@ -351,6 +351,16 @@ Portal: GET /portal/me | products | products/{purchase_id} | warranty | service 
 
 Errors always come back as `{"error": {"code", "message", "details"}}`. Stack traces are logged,
 never returned.
+
+## Troubleshooting
+
+- **App feels slow on Windows:** use `127.0.0.1`, not `localhost`, for `DATABASE_URL` and
+  `VITE_BACKEND_URL`. On Windows, `localhost` resolves to IPv6 `::1` first while Postgres and
+  uvicorn listen on IPv4, so every connection waits for a refused IPv6 attempt.
+- **"Something went wrong (ref abc123)":** search the API log for `ref abc123` to see the full
+  error. Also check that migrations are current with `alembic upgrade head`.
+- **Customer portal sign-in:** a customer signs in with the Business ID plus the email the owner
+  registered for them. The same email can be an owner account and a customer of several businesses.
 
 ## Known limitations
 

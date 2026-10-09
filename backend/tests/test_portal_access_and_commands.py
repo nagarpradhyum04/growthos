@@ -152,3 +152,52 @@ def test_lifecycle_and_insights_commands(client, auth):
     assert wf["command"] == "lifecycle" and wf["state"] == "COMPLETED"
     wf = _run(client, auth, "Give me a performance report")
     assert wf["command"] == "insights" and any(e["agent"] == "analytics" for e in wf["events"])
+
+
+def _portal_login(client, business_id, email):
+    req = client.post("/portal-auth/request", json={"business_id": business_id, "email": email}).json()
+    return client.post("/portal-auth/verify", json={"request_id": req["request_id"], "code": req["dev_code"]})
+
+
+def test_owner_email_can_also_be_a_portal_customer(client, auth):
+    owner_email = client.get("/auth/me", headers=auth).json()["user"]["email"]
+    client.post("/customers", headers=auth, json={"name": "Owner as customer", "email": owner_email})
+    r = _portal_login(client, _business_id(client, auth), owner_email)
+    assert r.status_code == 200, r.text
+    portal = {"Authorization": f"Bearer {r.json()['access_token']}"}
+    assert client.get("/portal/me", headers=portal).status_code == 200
+    # the owner account is unaffected and still signs in with its password
+    login = client.post("/auth/login", json={"email": owner_email, "password": "correct-horse-battery"})
+    assert login.status_code == 200 and client.get("/auth/me", headers={
+        "Authorization": f"Bearer {login.json()['access_token']}"}).status_code == 200
+
+
+def test_customer_of_two_businesses_signs_in_to_each(client, auth):
+    client.post("/customers", headers=auth, json={"name": "Pat", "email": "pat@shared.example"})
+    other = register(client, email="owner2@other.example", org="Other Co")
+    client.post("/customers", headers=other, json={"name": "Pat", "email": "pat@shared.example"})
+    first = _portal_login(client, _business_id(client, auth), "pat@shared.example")
+    second = _portal_login(client, _business_id(client, other), "pat@shared.example")
+    assert first.status_code == 200 and second.status_code == 200
+    me1 = client.get("/portal/me", headers={"Authorization": f"Bearer {first.json()['access_token']}"}).json()
+    me2 = client.get("/portal/me", headers={"Authorization": f"Bearer {second.json()['access_token']}"}).json()
+    assert me1["business"]["name"] != me2["business"]["name"]
+    # signing in again reuses the same portal account
+    assert _portal_login(client, _business_id(client, auth), "pat@shared.example").status_code == 200
+    # a portal-only email still can't use the owner login
+    assert client.post("/auth/login", json={"email": "pat@shared.example", "password": "x" * 12}).status_code == 403
+    # owner emails stay unique
+    dup = client.post("/auth/register", json={"organization_name": "X", "name": "X", "email": "owner2@other.example",
+                                               "password": "correct-horse-battery"})
+    assert dup.status_code == 409
+
+
+def test_unexpected_errors_carry_a_reference(client):
+    from app.main import app
+
+    @app.get("/__boom_test")
+    def boom():
+        raise RuntimeError("boom")
+
+    r = client.get("/__boom_test")
+    assert r.status_code == 500 and r.json()["error"]["details"]["ref"] in r.json()["error"]["message"]

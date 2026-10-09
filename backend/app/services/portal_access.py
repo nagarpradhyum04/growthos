@@ -134,8 +134,6 @@ def verify_code(db: Session, request_id: uuid.UUID, code: str) -> tuple[str, Cus
     req.status = "USED"
     user = db.scalar(select(User).where(User.customer_id == customer.id))
     if user is None:
-        if db.scalar(select(User.id).where(User.email == customer.email)):
-            raise PortalAuthError("This email is used by a business account and cannot sign in to the portal.")
         # Portal users have no password: sign-in is always Business ID + emailed code.
         user = User(organization_id=customer.organization_id, email=customer.email, name=customer.name,
                     role=UserRole.CUSTOMER.value, customer_id=customer.id,

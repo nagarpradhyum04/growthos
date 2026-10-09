@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import get_settings
 
-engine = create_engine(get_settings().database_url, pool_pre_ping=True, future=True)
+# Room for the dashboard's parallel requests plus slow agent calls; fail fast (10s) instead of hanging.
+engine = create_engine(get_settings().database_url, pool_pre_ping=True, pool_size=10, max_overflow=20,
+                       pool_timeout=10, pool_recycle=1800, future=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 

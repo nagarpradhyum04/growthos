@@ -1,7 +1,7 @@
 import secrets
 import uuid
 
-from sqlalchemy import JSON, Boolean, ForeignKey, String, Text
+from sqlalchemy import JSON, Boolean, ForeignKey, Index, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, OrgScoped, Timestamps, UUIDPk
@@ -29,9 +29,19 @@ class Organization(UUIDPk, Timestamps, Base):
 
 
 class User(UUIDPk, Timestamps, OrgScoped, Base):
-    __tablename__ = "users"
+    """Owner accounts (email + password) and customer-portal accounts (one per customer record).
 
-    email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    The same email may be an owner of one business and a customer of several others, so email is unique
+    only among owners; a portal account is unique per customer record.
+    """
+
+    __tablename__ = "users"
+    __table_args__ = (
+        Index("uq_users_owner_email", "email", unique=True, postgresql_where=text("role = 'owner'")),
+        Index("uq_users_customer_id", "customer_id", unique=True, postgresql_where=text("customer_id IS NOT NULL")),
+    )
+
+    email: Mapped[str] = mapped_column(String(320), index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(200), default="", nullable=False)
     password_hash: Mapped[str] = mapped_column(String(200), nullable=False)
     # "owner" (business user) or "customer" (portal user, bound to one customer record).

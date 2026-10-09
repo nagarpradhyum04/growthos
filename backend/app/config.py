@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     )
 
     # Core
-    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/growthos"
+    database_url: str = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/growthos"
     jwt_secret: str = "dev-only-insecure-secret-change-me"
     jwt_expiry_minutes: int = 60 * 12
     public_base_url: str = "http://localhost:8000"

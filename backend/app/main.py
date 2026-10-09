@@ -1,11 +1,14 @@
 """FastAPI application entry point: `uvicorn app.main:app --reload`."""
 import logging
+import uuid
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+
 from sqlalchemy.exc import IntegrityError, OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 
 from app.api import (
     analytics,
@@ -75,11 +78,18 @@ def handle_db_error(request: Request, exc: OperationalError):
     return _error(503, "database_unavailable", "The database is temporarily unavailable. Please retry.")
 
 
+@app.exception_handler(PoolTimeoutError)
+def handle_pool_timeout(request: Request, exc: PoolTimeoutError):
+    logger.error("Database connection pool exhausted on %s %s", request.method, request.url.path)
+    return _error(503, "database_busy", "The server is busy (all database connections in use). Please retry.")
+
+
 @app.exception_handler(Exception)
 def handle_unexpected(request: Request, exc: Exception):
-    # Never leak stack traces to clients; log them internally.
-    logger.exception("Unhandled error on %s %s", request.method, request.url.path)
-    return _error(500, "internal_error", "Something went wrong. Please try again.")
+    # Never leak stack traces to clients; log them internally under a reference the user can quote.
+    ref = uuid.uuid4().hex[:8]
+    logger.exception("Unhandled error [ref %s] on %s %s", ref, request.method, request.url.path)
+    return _error(500, "internal_error", f"Something went wrong (ref {ref}). Please try again.", {"ref": ref})
 
 
 @app.get("/health", tags=["system"])
