@@ -86,9 +86,9 @@ class Settings(BaseSettings):
 
     @property
     def resolved_gemini_backend(self) -> str:
-        if self.gemini_backend in ("ai_studio", "vertex"):
-            return self.gemini_backend
-        return "vertex" if (self.gemini_api_key or "").startswith("AQ.") else "ai_studio"
+        # "AQ." keys come from both Google AI Studio and Vertex AI, so the prefix can't decide: "auto" tries
+        # AI Studio first and falls back to Vertex AI if the key is rejected (services/gemini_client.py).
+        return self.gemini_backend if self.gemini_backend in ("ai_studio", "vertex") else "auto"
 
     @property
     def gemini_base_url(self) -> str:
@@ -100,7 +100,8 @@ class Settings(BaseSettings):
     def resolved_llm_model(self) -> str:
         if self.llm_model:
             return self.llm_model
-        return {"mock": "mock-model", "gemini": "gemini-2.5-flash"}.get(self.llm_provider, "gpt-4o-mini")
+        # gemini-flash-latest always points at Google's current Flash model (no retirement 404s).
+        return {"mock": "mock-model", "gemini": "gemini-flash-latest"}.get(self.llm_provider, "gpt-4o-mini")
 
 
 @lru_cache

@@ -53,24 +53,33 @@ def check_llm(s) -> tuple:
 
 
 def check_gemini_key(s) -> tuple:
+    used = s.media_provider == "gemini" or s.llm_provider == "gemini"
     if not s.gemini_api_key:
-        return _row(WARN if s.media_provider == "gemini" or s.llm_provider == "gemini" else OK, "Gemini key",
-                    "GEMINI_API_KEY is empty" if s.media_provider == "gemini" or s.llm_provider == "gemini"
-                    else "not used")
-    url = f"{s.gemini_base_url}/models/gemini-2.5-flash:generateContent"
+        return _row(WARN if used else OK, "Gemini key", "GEMINI_API_KEY is empty" if used else "not used")
+    from app.services.gemini_client import AI_STUDIO, GeminiClient, GeminiHTTPError, pick_model
+
+    client = GeminiClient(s.gemini_api_key, backend=s.resolved_gemini_backend, timeout=30)
+    model = s.resolved_llm_model if s.llm_provider == "gemini" else "gemini-flash-latest"
     try:
-        r = httpx.post(url, headers={"x-goog-api-key": s.gemini_api_key}, timeout=30,
-                       json={"contents": [{"role": "user", "parts": [{"text": "Reply with the word ok"}]}]})
+        r, used_model = client.call_model(model, "generateContent", {
+            "contents": [{"role": "user", "parts": [{"text": "Reply with the word ok"}]}]}, "text")
+    except GeminiHTTPError as exc:
+        return _row(FAIL, "Gemini key", str(exc))
     except httpx.HTTPError as exc:
-        return _row(FAIL, "Gemini key", f"cannot reach {url.split('/v1')[0]}: {type(exc).__name__}")
-    where = "Vertex AI (aiplatform.googleapis.com)" if s.resolved_gemini_backend == "vertex" else \
-        "Google AI Studio (generativelanguage.googleapis.com)"
-    if r.status_code == 200:
-        return _row(OK, "Gemini key", f"valid for {where}")
-    msg = r.json().get("error", {}).get("message", r.text[:150]) if "json" in r.headers.get("content-type", "") else r.text[:150]
-    other = "ai_studio" if s.resolved_gemini_backend == "vertex" else "vertex"
-    return _row(FAIL, "Gemini key", f"HTTP {r.status_code} from {where}: {msg[:200]}  "
-                f"→ if this key is for the other Google service, set GEMINI_BACKEND={other}")
+        return _row(FAIL, "Gemini key", f"cannot reach Google: {type(exc).__name__}")
+    where = "Google AI Studio" if client.base == AI_STUDIO else "Vertex AI"
+    if r.status_code != 200:
+        hint = {400: "the key is not valid", 401: "the key is not valid", 403: "the key has no access (enable the "
+                "Gemini API / billing for this key's project)", 429: "quota exhausted or rate limited"}.get(r.status_code, "")
+        return _row(FAIL, "Gemini key", f"HTTP {r.status_code} from {where}: {GeminiClient.error_message(r)}"
+                    + (f" → {hint}" if hint else ""))
+    models = client.list_models()
+    picks = {k: pick_model(models, k) for k in ("text", "image", "video")} if models else {}
+    note = f" (configured '{model}' is unavailable; using '{used_model}' — set LLM_MODEL={used_model})" \
+        if used_model != model else ""
+    avail = (f"; best available → text: {picks.get('text') or '-'}, image: {picks.get('image') or '-'}, "
+             f"video: {picks.get('video') or '-'}") if picks else ""
+    return _row(OK, "Gemini key", f"valid for {where}, model {used_model} answered{note}{avail}")
 
 
 def check_media(s, run_image: bool) -> tuple:

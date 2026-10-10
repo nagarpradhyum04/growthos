@@ -282,9 +282,14 @@ python -m app.check_providers --send-test-email you@example.com
 ```
 
 The command reports OK, WARN or FAIL for the LLM, the Gemini key, social media generation, email, web research
-and secrets, and says what to change for anything that fails. Gemini keys from Google AI Studio (`AIza…`) and
-Vertex AI express-mode keys (`AQ.…`) both work. The right endpoint is chosen automatically, or you can set
-`GEMINI_BACKEND`.
+and secrets, and says what to change for anything that fails.
+
+Gemini keys from Google AI Studio and from Vertex AI express mode both work, whether they start with `AIza…` or
+`AQ.…`. Google AI Studio is tried first and Vertex AI is the fallback; set `GEMINI_BACKEND` to force one.
+
+Gemini model ids get retired over time. When a configured model returns 404, GrowthOS asks Google which models
+your key can use, switches to the best current one of the same kind (text, image or video) and logs the switch.
+The check command also prints the best available models.
 
 ## Business rules (always enforced by the backend)
 

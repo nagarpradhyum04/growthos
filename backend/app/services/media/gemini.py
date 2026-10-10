@@ -13,10 +13,10 @@ import time
 import httpx
 
 from app.config import Settings
+from app.services.gemini_client import VERTEX, GeminiClient, GeminiHTTPError
 from app.services.media import MediaError, MediaProvider, MediaResult
 
 logger = logging.getLogger(__name__)
-BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 
 class GeminiMediaProvider(MediaProvider):
@@ -26,27 +26,26 @@ class GeminiMediaProvider(MediaProvider):
         if not settings.gemini_api_key:
             raise MediaError("GEMINI_API_KEY is not set")
         self.settings = settings
-        self._client = httpx.Client(timeout=120, transport=transport, follow_redirects=True,
-                                    headers={"x-goog-api-key": settings.gemini_api_key})
+        self.client = GeminiClient(settings.gemini_api_key, backend=settings.resolved_gemini_backend, timeout=120,
+                                   transport=transport)
         self.poll_seconds = poll_seconds
-        self.base_url = settings.gemini_base_url
-        self.vertex = settings.resolved_gemini_backend == "vertex"
 
-    def _post(self, url: str, body: dict) -> dict:
+    def _call(self, model: str, method: str, body: dict, kind: str) -> tuple[dict, str]:
         try:
-            r = self._client.post(url, json=body)
+            r, used = self.client.call_model(model, method, body, kind)
+        except GeminiHTTPError as exc:
+            raise MediaError(f"Gemini API error HTTP {exc.status}: {exc}") from exc
         except httpx.HTTPError as exc:
             raise MediaError(f"Gemini API unreachable: {type(exc).__name__}") from exc
         if r.status_code >= 400:
-            raise MediaError(f"Gemini API error HTTP {r.status_code}: {r.text[:300]}")
-        return r.json()
+            raise MediaError(f"Gemini API error HTTP {r.status_code}: {GeminiClient.error_message(r)}")
+        return r.json(), used
 
     def generate_image(self, prompt: str, *, aspect_ratio: str, brand: dict) -> MediaResult:
-        model = self.settings.gemini_image_model
-        data = self._post(f"{self.base_url}/models/{model}:generateContent", {
+        data, model = self._call(self.settings.gemini_image_model, "generateContent", {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": aspect_ratio}},
-        })
+        }, "image")
         for cand in data.get("candidates", []):
             for part in cand.get("content", {}).get("parts", []):
                 inline = part.get("inlineData") or part.get("inline_data")
@@ -56,12 +55,23 @@ class GeminiMediaProvider(MediaProvider):
         reason = (data.get("promptFeedback") or {}).get("blockReason") or "no image in response"
         raise MediaError(f"Image generation returned no image ({reason})")
 
+    def _poll(self, model: str, name: str) -> dict:
+        try:
+            if self.client.base == VERTEX:  # Vertex AI polls Veo operations through fetchPredictOperation
+                r = self.client.request("POST", f"models/{model}:fetchPredictOperation", {"operationName": name})
+            else:
+                r = self.client.request("GET", name)
+        except httpx.HTTPError as exc:
+            raise MediaError(f"Gemini API unreachable while polling: {type(exc).__name__}") from exc
+        if r.status_code >= 400:
+            raise MediaError(f"Polling failed HTTP {r.status_code}: {GeminiClient.error_message(r)}")
+        return r.json()
+
     def generate_video(self, prompt: str, *, aspect_ratio: str, brand: dict) -> MediaResult:
-        model = self.settings.gemini_video_model
-        op = self._post(f"{self.base_url}/models/{model}:predictLongRunning", {
+        op, model = self._call(self.settings.gemini_video_model, "predictLongRunning", {
             "instances": [{"prompt": prompt}],
             "parameters": {"aspectRatio": aspect_ratio, "sampleCount": 1},
-        })
+        }, "video")
         name = op.get("name")
         if not name:
             raise MediaError("Video generation did not return an operation")
@@ -70,16 +80,7 @@ class GeminiMediaProvider(MediaProvider):
             if time.monotonic() > deadline:
                 raise MediaError("Video generation timed out")
             time.sleep(self.poll_seconds)
-            if self.vertex:  # Vertex AI polls Veo operations through fetchPredictOperation
-                op = self._post(f"{self.base_url}/models/{model}:fetchPredictOperation", {"operationName": name})
-                continue
-            try:
-                r = self._client.get(f"{self.base_url}/{name}")
-            except httpx.HTTPError as exc:
-                raise MediaError(f"Gemini API unreachable while polling: {type(exc).__name__}") from exc
-            if r.status_code >= 400:
-                raise MediaError(f"Polling failed HTTP {r.status_code}")
-            op = r.json()
+            op = self._poll(model, name)
         if op.get("error"):
             raise MediaError(f"Video generation failed: {op['error'].get('message', op['error'])}")
         resp = op.get("response", {})
@@ -96,7 +97,7 @@ class GeminiMediaProvider(MediaProvider):
         if not uri:
             raise MediaError("Video generation finished without a video (it may have been filtered)")
         try:
-            v = self._client.get(uri)
+            v = self.client._client.get(uri)
         except httpx.HTTPError as exc:
             raise MediaError(f"Video download failed: {type(exc).__name__}") from exc
         if v.status_code >= 400:

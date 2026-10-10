@@ -1,10 +1,11 @@
 """Google Gemini implementation of LLMProvider (generateContent with JSON output).
 
-Lets one GEMINI_API_KEY power both the agents (LLM_PROVIDER=gemini) and the social media
-generation (MEDIA_PROVIDER=gemini).
+Lets one GEMINI_API_KEY power both the agents (LLM_PROVIDER=gemini) and the social media generation
+(MEDIA_PROVIDER=gemini). Endpoint choice and retired-model fallback live in services/gemini_client.py.
 """
 import httpx
 
+from app.services.gemini_client import AI_STUDIO, GeminiClient, GeminiHTTPError
 from app.services.llm.provider import (
     LLMProvider,
     LLMProviderError,
@@ -14,20 +15,19 @@ from app.services.llm.provider import (
     LLMTimeoutError,
 )
 
-BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+BASE_URL = AI_STUDIO
 
 
 class GeminiLLMProvider(LLMProvider):
     name = "gemini"
 
     def __init__(self, api_key: str, timeout_seconds: float, transport: httpx.BaseTransport | None = None,
-                 base_url: str = BASE_URL):
+                 base_url: str | None = None, backend: str = "auto"):
         if not api_key:
             raise LLMProviderError("GEMINI_API_KEY is not set")
-        self.base_url = base_url
         # Retries are handled by LLMService so they are visible in agent_runs.
-        self._client = httpx.Client(timeout=timeout_seconds, transport=transport,
-                                    headers={"x-goog-api-key": api_key})
+        self.client = GeminiClient(api_key, backend=backend, timeout=timeout_seconds, transport=transport,
+                                   base_url=base_url)
 
     def complete_json(self, request: LLMRequest) -> LLMResponse:
         body = {
@@ -38,7 +38,9 @@ class GeminiLLMProvider(LLMProvider):
                                  "maxOutputTokens": 8192},
         }
         try:
-            r = self._client.post(f"{self.base_url}/models/{request.model}:generateContent", json=body)
+            r, model = self.client.call_model(request.model, "generateContent", body, "text")
+        except GeminiHTTPError as exc:
+            raise LLMProviderError(f"LLM provider rejected the request (HTTP {exc.status}) {exc}") from exc
         except httpx.TimeoutException as exc:
             raise LLMTimeoutError("LLM request timed out") from exc
         except httpx.HTTPError as exc:
@@ -49,9 +51,8 @@ class GeminiLLMProvider(LLMProvider):
             raise LLMTimeoutError(f"LLM provider server error ({r.status_code})")
         if r.status_code >= 400:
             # Only the provider's status/message, never the request content.
-            message = (r.json().get("error", {}) if r.headers.get("content-type", "").startswith("application/json")
-                       else {}).get("message", "")
-            raise LLMProviderError(f"LLM provider rejected the request (HTTP {r.status_code}) {message[:200]}".strip())
+            raise LLMProviderError(f"LLM provider rejected the request (HTTP {r.status_code}) "
+                                   f"{GeminiClient.error_message(r)}".strip())
         data = r.json()
         candidates = data.get("candidates") or []
         if not candidates:
@@ -66,4 +67,4 @@ class GeminiLLMProvider(LLMProvider):
             raise LLMProviderError(f"LLM answer was blocked by the provider (finishReason={finish})")
         meta = data.get("usageMetadata") or {}
         usage = {"prompt_tokens": meta.get("promptTokenCount", 0), "completion_tokens": meta.get("candidatesTokenCount", 0)}
-        return LLMResponse(content=text, model=data.get("modelVersion") or request.model, usage=usage)
+        return LLMResponse(content=text, model=data.get("modelVersion") or model, usage=usage)

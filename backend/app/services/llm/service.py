@@ -215,7 +215,7 @@ def build_provider(settings: Settings) -> LLMProvider:
         from app.services.llm.gemini_provider import GeminiLLMProvider
 
         return GeminiLLMProvider(settings.gemini_api_key or "", settings.llm_timeout_seconds,
-                                 base_url=settings.gemini_base_url)
+                                 backend=settings.resolved_gemini_backend)
     if settings.llm_provider == "mock":
         from app.services.llm.mock_provider import MockLLMProvider
 

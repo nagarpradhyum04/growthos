@@ -161,14 +161,57 @@ def test_gemini_llm_provider_requests_json_and_parses_text():
         pass
 
 
-def test_gemini_backend_is_chosen_from_the_key():
+def test_gemini_backend_defaults_to_auto_for_any_key():
     from app.config import Settings
 
-    assert Settings(gemini_api_key="AIzaSyExample").resolved_gemini_backend == "ai_studio"
-    vertex = Settings(gemini_api_key="AQ.Ab8Example")
-    assert vertex.resolved_gemini_backend == "vertex"
-    assert vertex.gemini_base_url == "https://aiplatform.googleapis.com/v1/publishers/google"
-    assert Settings(gemini_api_key="AQ.x", gemini_backend="ai_studio").resolved_gemini_backend == "ai_studio"
+    # "AQ." keys are issued by Google AI Studio too, so the prefix must not force Vertex AI.
+    assert Settings(gemini_api_key="AQ.Ab8Example").resolved_gemini_backend == "auto"
+    assert Settings(gemini_api_key="AQ.x", gemini_backend="vertex").gemini_base_url.startswith("https://aiplatform")
+    assert Settings(llm_provider="gemini").resolved_llm_model == "gemini-flash-latest"
+
+
+def test_retired_gemini_model_404_switches_to_best_available_model():
+    import httpx
+
+    from app.services.llm.gemini_provider import GeminiLLMProvider
+    from app.services.llm.provider import LLMRequest
+
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path.endswith("/models"):
+            return httpx.Response(200, json={"models": [
+                {"name": "models/gemini-3.5-flash-lite", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-3.8-flash", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/gemini-3.8-flash-image", "supportedGenerationMethods": ["generateContent"]},
+                {"name": "models/text-embedding-005", "supportedGenerationMethods": ["embedContent"]}]})
+        if "gemini-2.5-flash:" in request.url.path:
+            return httpx.Response(404, json={"error": {"message": "models/gemini-2.5-flash is not found"}})
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": '{"ok": true}'}]}}]})
+
+    p = GeminiLLMProvider("AQ.key", 5, transport=httpx.MockTransport(handler))
+    req = LLMRequest(agent_name="x", system_prompt="s", model="gemini-2.5-flash", messages=[])
+    out = p.complete_json(req)
+    assert out.content == '{"ok": true}' and out.model == "gemini-3.8-flash"
+    p.complete_json(req)  # remembered: no second 404 / model listing
+    assert sum(1 for c in calls if c.endswith("/models")) == 1
+    assert calls[-1].endswith("gemini-3.8-flash:generateContent")
+
+
+def test_key_rejected_by_ai_studio_falls_back_to_vertex():
+    import httpx
+
+    from app.services.gemini_client import GeminiClient
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "generativelanguage.googleapis.com":
+            return httpx.Response(401, json={"error": {"message": "invalid"}})
+        return httpx.Response(200, json={"candidates": []})
+
+    c = GeminiClient("AQ.vertexkey", transport=httpx.MockTransport(handler))
+    r, _ = c.call_model("gemini-flash-latest", "generateContent", {}, "text")
+    assert r.status_code == 200 and c.base.startswith("https://aiplatform")
 
 
 def test_vertex_veo_polls_fetch_predict_operation_and_decodes_bytes():
@@ -188,7 +231,7 @@ def test_vertex_veo_polls_fetch_predict_operation_and_decodes_bytes():
         return httpx.Response(200, json={"done": True, "response": {"videos": [
             {"bytesBase64Encoded": base64.b64encode(b"MP4").decode(), "mimeType": "video/mp4"}]}})
 
-    s = get_settings().model_copy(update={"gemini_api_key": "AQ.test", "gemini_backend": "auto"})
+    s = get_settings().model_copy(update={"gemini_api_key": "AQ.test", "gemini_backend": "vertex"})
     res = GeminiMediaProvider(s, transport=httpx.MockTransport(handler), poll_seconds=0).generate_video(
         "Scene 1", aspect_ratio="9:16", brand={})
     assert res.data == b"MP4" and paths[0].startswith("/v1/publishers/google/models/")
