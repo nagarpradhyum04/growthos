@@ -20,9 +20,11 @@ BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 class GeminiLLMProvider(LLMProvider):
     name = "gemini"
 
-    def __init__(self, api_key: str, timeout_seconds: float, transport: httpx.BaseTransport | None = None):
+    def __init__(self, api_key: str, timeout_seconds: float, transport: httpx.BaseTransport | None = None,
+                 base_url: str = BASE_URL):
         if not api_key:
             raise LLMProviderError("GEMINI_API_KEY is not set")
+        self.base_url = base_url
         # Retries are handled by LLMService so they are visible in agent_runs.
         self._client = httpx.Client(timeout=timeout_seconds, transport=transport,
                                     headers={"x-goog-api-key": api_key})
@@ -35,7 +37,7 @@ class GeminiLLMProvider(LLMProvider):
             "generationConfig": {"temperature": request.temperature, "responseMimeType": "application/json"},
         }
         try:
-            r = self._client.post(f"{BASE_URL}/models/{request.model}:generateContent", json=body)
+            r = self._client.post(f"{self.base_url}/models/{request.model}:generateContent", json=body)
         except httpx.TimeoutException as exc:
             raise LLMTimeoutError("LLM request timed out") from exc
         except httpx.HTTPError as exc:

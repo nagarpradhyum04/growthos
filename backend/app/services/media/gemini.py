@@ -29,6 +29,8 @@ class GeminiMediaProvider(MediaProvider):
         self._client = httpx.Client(timeout=120, transport=transport, follow_redirects=True,
                                     headers={"x-goog-api-key": settings.gemini_api_key})
         self.poll_seconds = poll_seconds
+        self.base_url = settings.gemini_base_url
+        self.vertex = settings.resolved_gemini_backend == "vertex"
 
     def _post(self, url: str, body: dict) -> dict:
         try:
@@ -41,8 +43,8 @@ class GeminiMediaProvider(MediaProvider):
 
     def generate_image(self, prompt: str, *, aspect_ratio: str, brand: dict) -> MediaResult:
         model = self.settings.gemini_image_model
-        data = self._post(f"{BASE_URL}/models/{model}:generateContent", {
-            "contents": [{"parts": [{"text": prompt}]}],
+        data = self._post(f"{self.base_url}/models/{model}:generateContent", {
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"responseModalities": ["IMAGE"], "imageConfig": {"aspectRatio": aspect_ratio}},
         })
         for cand in data.get("candidates", []):
@@ -56,9 +58,9 @@ class GeminiMediaProvider(MediaProvider):
 
     def generate_video(self, prompt: str, *, aspect_ratio: str, brand: dict) -> MediaResult:
         model = self.settings.gemini_video_model
-        op = self._post(f"{BASE_URL}/models/{model}:predictLongRunning", {
+        op = self._post(f"{self.base_url}/models/{model}:predictLongRunning", {
             "instances": [{"prompt": prompt}],
-            "parameters": {"aspectRatio": aspect_ratio},
+            "parameters": {"aspectRatio": aspect_ratio, "sampleCount": 1},
         })
         name = op.get("name")
         if not name:
@@ -68,8 +70,11 @@ class GeminiMediaProvider(MediaProvider):
             if time.monotonic() > deadline:
                 raise MediaError("Video generation timed out")
             time.sleep(self.poll_seconds)
+            if self.vertex:  # Vertex AI polls Veo operations through fetchPredictOperation
+                op = self._post(f"{self.base_url}/models/{model}:fetchPredictOperation", {"operationName": name})
+                continue
             try:
-                r = self._client.get(f"{BASE_URL}/{name}")
+                r = self._client.get(f"{self.base_url}/{name}")
             except httpx.HTTPError as exc:
                 raise MediaError(f"Gemini API unreachable while polling: {type(exc).__name__}") from exc
             if r.status_code >= 400:
@@ -78,6 +83,12 @@ class GeminiMediaProvider(MediaProvider):
         if op.get("error"):
             raise MediaError(f"Video generation failed: {op['error'].get('message', op['error'])}")
         resp = op.get("response", {})
+        videos = resp.get("videos") or []  # Vertex AI shape: inline bytes (or a Cloud Storage URI)
+        if videos:
+            if videos[0].get("bytesBase64Encoded"):
+                return MediaResult(base64.b64decode(videos[0]["bytesBase64Encoded"]),
+                                   videos[0].get("mimeType", "video/mp4"), self.name, model)
+            raise MediaError("Veo returned a Cloud Storage URI; configure the output without storageUri to get bytes")
         # Field names differ between API/SDK versions; accept both shapes.
         samples = (resp.get("generateVideoResponse", {}).get("generatedSamples")
                    or resp.get("generatedVideos") or resp.get("generated_videos") or [])

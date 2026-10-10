@@ -247,6 +247,20 @@ media posts"* in the Command Center or click *Generate* in Social Studio. Approv
 are never overwritten. Media files are stored in `MEDIA_DIR` (default `backend/media/`, gitignored)
 and served only to the business owner.
 
+## Checking your API keys
+
+```bash
+cd backend
+python -m app.check_providers                 # one tiny real request per configured provider
+python -m app.check_providers --media         # also generate one real test image (uses Gemini quota)
+python -m app.check_providers --send-test-email you@example.com
+```
+
+The command reports OK, WARN or FAIL for the LLM, the Gemini key, social media generation, email, web research
+and secrets, and says what to change for anything that fails. Gemini keys from Google AI Studio (`AIza…`) and
+Vertex AI express-mode keys (`AQ.…`) both work. The right endpoint is chosen automatically, or you can set
+`GEMINI_BACKEND`.
+
 ## Business rules (always enforced by the backend)
 
 Every send passes `can_send()` in `backend/app/services/safety.py`. It blocks the send when:

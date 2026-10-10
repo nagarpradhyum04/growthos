@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # Social media generation: "gemini" (Nano Banana images + Veo video) or "mock" (offline previews)
     media_provider: str = "mock"
     gemini_api_key: str = ""
+    # Which Google endpoint the key belongs to: "ai_studio" (keys start with "AIza", generativelanguage.googleapis.com),
+    # "vertex" (Vertex AI express-mode keys, usually "AQ.…", aiplatform.googleapis.com), or "auto" (decide by prefix).
+    gemini_backend: str = "auto"
     gemini_image_model: str = "gemini-2.5-flash-image"
     gemini_video_model: str = "veo-3.1-generate-preview"
     social_image_aspect: str = "1:1"
@@ -68,6 +71,18 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+
+    @property
+    def resolved_gemini_backend(self) -> str:
+        if self.gemini_backend in ("ai_studio", "vertex"):
+            return self.gemini_backend
+        return "vertex" if (self.gemini_api_key or "").startswith("AQ.") else "ai_studio"
+
+    @property
+    def gemini_base_url(self) -> str:
+        if self.resolved_gemini_backend == "vertex":
+            return "https://aiplatform.googleapis.com/v1/publishers/google"
+        return "https://generativelanguage.googleapis.com/v1beta"
 
     @property
     def resolved_llm_model(self) -> str:

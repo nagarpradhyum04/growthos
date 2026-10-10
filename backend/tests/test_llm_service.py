@@ -159,3 +159,37 @@ def test_gemini_llm_provider_requests_json_and_parses_text():
         raise AssertionError("expected rate limit")
     except LLMRateLimitError:
         pass
+
+
+def test_gemini_backend_is_chosen_from_the_key():
+    from app.config import Settings
+
+    assert Settings(gemini_api_key="AIzaSyExample").resolved_gemini_backend == "ai_studio"
+    vertex = Settings(gemini_api_key="AQ.Ab8Example")
+    assert vertex.resolved_gemini_backend == "vertex"
+    assert vertex.gemini_base_url == "https://aiplatform.googleapis.com/v1/publishers/google"
+    assert Settings(gemini_api_key="AQ.x", gemini_backend="ai_studio").resolved_gemini_backend == "ai_studio"
+
+
+def test_vertex_veo_polls_fetch_predict_operation_and_decodes_bytes():
+    import base64
+
+    import httpx
+
+    from app.config import get_settings
+    from app.services.media.gemini import GeminiMediaProvider
+
+    paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path.endswith(":predictLongRunning"):
+            return httpx.Response(200, json={"name": "projects/p/operations/op1", "done": False})
+        return httpx.Response(200, json={"done": True, "response": {"videos": [
+            {"bytesBase64Encoded": base64.b64encode(b"MP4").decode(), "mimeType": "video/mp4"}]}})
+
+    s = get_settings().model_copy(update={"gemini_api_key": "AQ.test", "gemini_backend": "auto"})
+    res = GeminiMediaProvider(s, transport=httpx.MockTransport(handler), poll_seconds=0).generate_video(
+        "Scene 1", aspect_ratio="9:16", brand={})
+    assert res.data == b"MP4" and paths[0].startswith("/v1/publishers/google/models/")
+    assert paths[1].endswith(":fetchPredictOperation")
