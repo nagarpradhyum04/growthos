@@ -233,3 +233,32 @@ def test_full_cycle_without_campaign_skips_acquisition_with_a_reason(client):
     events = client.get(f"/workflows/{wf['id']}", headers=headers).json()["events"]
     skipped = next(e for e in events if e["action"] == "Stage: Find & qualify new customers")
     assert skipped["status"] == "SKIPPED" and "no active campaign" in skipped["result"]
+
+
+def test_every_draft_reaches_the_approval_center_however_it_was_created(client, auth, lead, db):
+    # Manual path (Lead page): research -> qualify -> generate email, no Orchestrator run involved.
+    assert client.post(f"/leads/{lead['id']}/research", headers=auth).status_code == 200
+    assert client.post(f"/leads/{lead['id']}/qualify", headers=auth).json()["qualified"]
+    email = client.post(f"/leads/{lead['id']}/generate-email", headers=auth).json()
+    pending = [a for a in client.get("/approvals", headers=auth).json() if a["type"] == "OUTBOUND_EMAIL"]
+    assert len(pending) == 1 and pending[0]["subject"]["id"] == email["id"]
+    # Regenerating the draft keeps exactly one approval for it.
+    client.post(f"/leads/{lead['id']}/generate-email", headers=auth)
+    assert len([a for a in client.get("/approvals", headers=auth).json() if a["type"] == "OUTBOUND_EMAIL"]) == 1
+    # Approving from the Approval Center sends it through the normal safety path.
+    sent = client.post(f"/approvals/{pending[0]['id']}/approve", json={"send": True}, headers=auth)
+    assert sent.status_code == 200
+    assert client.get(f"/emails/{email['id']}", headers=auth).json()["status"] in ("SENT", "DELIVERED")
+    assert not [a for a in client.get("/approvals", headers=auth).json() if a["type"] == "OUTBOUND_EMAIL"]
+
+
+def test_existing_drafts_without_approval_are_backfilled(client, auth, lead, db):
+    from app.models import Approval
+
+    client.post(f"/leads/{lead['id']}/research", headers=auth)
+    client.post(f"/leads/{lead['id']}/qualify", headers=auth)
+    client.post(f"/leads/{lead['id']}/generate-email", headers=auth)
+    db.query(Approval).delete()  # simulate drafts created before this fix
+    db.commit()
+    assert len(client.get("/approvals", headers=auth).json()) == 1
+    assert client.get("/system/status", headers=auth).json()["pending_approvals"] == 1

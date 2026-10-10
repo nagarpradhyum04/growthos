@@ -24,7 +24,7 @@ from app.schemas import (
     ResearchOut,
     TimelineEvent,
 )
-from app.services import jobs, lead_service
+from app.services import email_service, jobs, lead_service
 from app.services.common import get_owned, latest_research
 from app.services.container import Container
 
@@ -136,6 +136,7 @@ def generate_email(lead_id: uuid.UUID, cu: CurrentUser = Depends(current_user), 
                    c: Container = Depends(container)):
     email = lead_service.generate_initial_email(db, get_owned(db, Lead, lead_id, cu.org_id), c)
     db.commit()
+    email_service.ensure_review_approvals(db, cu.org_id)
     return email
 
 

@@ -75,6 +75,9 @@ def system_status(cu: CurrentUser = Depends(current_user), db: Session = Depends
         WorkflowEvent.organization_id == org, WorkflowEvent.completed_at >= now - timedelta(minutes=10)).distinct()).all()
     stuck = count(select(func.count(Job.id)).where(Job.organization_id == org, Job.status == JobStatus.QUEUED,
                                                    Job.run_at < now - timedelta(minutes=2)))
+    from app.services.email_service import ensure_review_approvals
+
+    ensure_review_approvals(db, org)
     s = c.settings
     return {
         "workflows_running": running,

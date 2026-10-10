@@ -66,6 +66,7 @@ def approval_dict(db: Session, a: Approval) -> dict:
 @router.get("")
 def list_approvals(status: ApprovalStatus | None = ApprovalStatus.PENDING, cu: CurrentUser = Depends(current_user),
                    db: Session = Depends(get_db)):
+    email_service.ensure_review_approvals(db, cu.org_id)  # drafts created outside a run still get here
     stmt = select(Approval).where(Approval.organization_id == cu.org_id)
     if status:
         stmt = stmt.where(Approval.status == status)

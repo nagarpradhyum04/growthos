@@ -155,6 +155,7 @@ def process_due_followups(db: Session, container: Container, now: datetime | Non
     Follow-ups of paused campaigns are left PENDING until the campaign resumes."""
     now = now or datetime.now(timezone.utc)
     outcomes: dict[str, int] = {}
+    touched: set = set()
     for _ in range(limit):
         stmt = (
             select(Followup)
@@ -167,7 +168,15 @@ def process_due_followups(db: Session, container: Container, now: datetime | Non
         followup = db.scalar(stmt.order_by(Followup.due_at).limit(1).with_for_update(skip_locked=True, of=Followup))
         if followup is None:
             break
+        org_id = followup.organization_id
         outcome = process_followup(db, followup, container)
         outcomes[outcome] = outcomes.get(outcome, 0) + 1
         db.commit()
+        if outcome == "generated":
+            touched.add(org_id)
+    # Follow-up drafts that wait for a human go to the Human Approval Center like first-touch drafts.
+    from app.services.email_service import ensure_review_approvals
+
+    for org_id in touched:
+        ensure_review_approvals(db, org_id)
     return outcomes

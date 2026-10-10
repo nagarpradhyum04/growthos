@@ -173,3 +173,37 @@ def mark_delivered(db: Session, provider_message_id: str) -> Email | None:
         email.status = EmailStatus.DELIVERED
         email.delivered_at = datetime.now(timezone.utc)
     return email
+
+
+def ensure_review_approvals(db: Session, organization_id) -> int:
+    """Every draft waiting for review must be in the Human Approval Center, however it was created
+    (Orchestrator run, Lead page, Email Review regeneration, follow-ups, or older data).
+    Creates the missing OUTBOUND_EMAIL approvals; existing ones are left alone. Returns how many were added."""
+    from app.models import Approval
+    from app.models.enums import ApprovalType, Priority
+    from app.services.policy import evaluate_outbound
+    from app.services.workflow_service import active_lead_workflow
+
+    has_pending = select(Approval.id).where(Approval.email_id == Email.id, Approval.status == ApprovalStatus.PENDING,
+                                            Approval.approval_type == ApprovalType.OUTBOUND_EMAIL).exists()
+    drafts = db.scalars(select(Email).where(Email.organization_id == organization_id, Email.status == EmailStatus.DRAFT,
+                                            ~has_pending)).all()
+    for email in drafts:
+        lead = db.get(Lead, email.lead_id)
+        decision = evaluate_outbound(db, email)
+        reasons = ["First-touch outreach always requires human approval (policy)" if email.sequence_number == 0
+                   else "Follow-ups require approval while automated sending is off"]
+        if decision.outcome != "ALLOW":
+            reasons.append(("Safety would block sending: " if decision.outcome == "BLOCK" else "") + decision.explain())
+        wf = active_lead_workflow(db, lead.id) if lead else None
+        approval_service.create(
+            db, organization_id, ApprovalType.OUTBOUND_EMAIL,
+            title=f"Review {'email' if email.sequence_number == 0 else f'follow-up #{email.sequence_number}'} to "
+                  f"{lead.company_name if lead else 'lead'}: “{email.subject}”",
+            reason="Escalated because: " + "; ".join(reasons),
+            priority=Priority.MEDIUM if decision.outcome == "ALLOW" else Priority.HIGH, category="outbound_email",
+            recommended_action="Review the draft and its evidence, then approve & send or reject.",
+            email_id=email.id, lead_id=email.lead_id, workflow_id=wf.id if wf else None, notify=False)
+    if drafts:
+        db.commit()
+    return len(drafts)
