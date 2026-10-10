@@ -22,7 +22,7 @@ export default function Leads() {
 
   async function importBulk(e: FormEvent) {
     e.preventDefault();
-    const prospects = bulk.split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((r) => r[0])
+    const prospects = bulk.split("\n").map((l) => l.split("|").map((x) => x.trim())).filter((r) => r[0] && !r[0].startsWith("#"))
       .map(([company_name, contact_email, contact_name = "", contact_role = "", notes = "", website = ""]) =>
         ({ company_name, contact_email, contact_name, contact_role, notes, website }));
     const campaign_id = form.campaign_id || campaigns.data?.[0]?.id || "";

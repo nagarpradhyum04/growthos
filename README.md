@@ -378,6 +378,19 @@ The QA run uses your configured LLM and media providers. Email is always forced 
 Run it again after switching to a real model (`LLM_PROVIDER=gemini` or `openai`) to check the real model against
 the same expectations. Your other businesses are not touched.
 
+### Just the test campaign and leads
+
+To load only the test campaign and its 6 prospects into your own business (nothing else is changed):
+
+```bash
+cd backend
+python -m app.seed_test_leads --owner-email you@yourbusiness.com
+```
+
+Or in the app, open **Leads → Import prospects**, pick a campaign and paste [`docs/test_leads.txt`](docs/test_leads.txt).
+Then run *"Find high-quality customers for our business"*. With a profile that targets healthcare clinics with
+20-500 staff, 4 leads should qualify and get drafts in Approvals; Lumen Software Studio and Quietly Holdings should not.
+
 ## Troubleshooting
 
 - **App feels slow on Windows:** use `127.0.0.1`, not `localhost`, for `DATABASE_URL` and
