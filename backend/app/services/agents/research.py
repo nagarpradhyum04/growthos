@@ -55,7 +55,7 @@ class ResearchAgent(BaseAgent):
         documents = [{**d.to_dict(), "text": neutralize_injections(d.text)} for d in evidence.documents]
         if data.notes.strip():
             documents.append({"url": NOTES_SOURCE, "title": "Notes provided by the user",
-                              "text": data.notes.strip(), "source_type": "user"})
+                              "text": neutralize_injections(data.notes.strip()), "source_type": "user"})
         allowed_urls = {d["url"] for d in documents}
 
         def validate(out: ResearchOutput) -> list[str]:

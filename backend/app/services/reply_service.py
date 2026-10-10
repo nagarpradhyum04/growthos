@@ -89,6 +89,8 @@ def record_reply(db: Session, organization_id: uuid.UUID, *, subject: str, body:
         reply.opt_out_detected = True
         reply.classification = ReplyClassification.UNSUBSCRIBE
         reply.recommended_action = "Do not contact this person again."
+        reply.summary = ("The contact asked to have their data deleted (Forget Me)." if opt_out == OptOutType.FORGET
+                         else "The contact asked to stop receiving emails.")
         reply.analyzed_at = datetime.now(timezone.utc)
         reply.tier = PriorityTier.GREEN
         reply.intents = ["opt_out"]

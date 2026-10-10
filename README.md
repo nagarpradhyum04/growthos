@@ -352,6 +352,32 @@ Portal: GET /portal/me | products | products/{purchase_id} | warranty | service 
 Errors always come back as `{"error": {"code", "message", "details"}}`. Stack traces are logged,
 never returned.
 
+## End-to-end QA run (all agents, real data flow)
+
+```bash
+cd backend
+python -m app.qa_check
+```
+
+This creates a separate test business called **QA Clinic Supplies** with:
+- 6 prospects: 4 that fit the profile (one has a prompt injection hidden in its notes), 1 off-target and 1 with no information
+- products, manuals, a warranty policy and an FAQ
+- a customer with two purchases
+
+It then runs every agent and the main features through the same API the UI uses:
+- the Orchestrator commands
+- Research, Qualification, Outreach, the Safety gate, approve & send
+- Email Intelligence on replies, follow-ups, Forget Me
+- portal sign-in (Access Agent), Product Support, the warranty check, service requests and lifecycle messages
+- social posts with media, analytics and memory, and the full growth cycle
+
+Each result is checked against what the agent is supposed to do. The pass/fail report and real sample outputs go to
+[`docs/QA_REPORT.md`](docs/QA_REPORT.md), and the logins are printed so you can open the same data in the app.
+
+The QA run uses your configured LLM and media providers. Email is always forced to mock, so no real email is sent.
+Run it again after switching to a real model (`LLM_PROVIDER=gemini` or `openai`) to check the real model against
+the same expectations. Your other businesses are not touched.
+
 ## Troubleshooting
 
 - **App feels slow on Windows:** use `127.0.0.1`, not `localhost`, for `DATABASE_URL` and

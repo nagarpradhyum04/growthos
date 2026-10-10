@@ -23,9 +23,9 @@ _INDUSTRY_KEYWORDS = [
     ("bank", "Financial services"),
     ("manufactur", "Manufacturing"),
     ("marketing agency", "Marketing services"),
-    ("agency", "Marketing services"),
     ("saas", "Software"),
     ("software", "Software"),
+    ("agency", "Marketing services"),
     ("platform", "Software"),
     ("education", "Education"),
     ("restaurant", "Hospitality"),
@@ -45,6 +45,18 @@ _PAIN_POINTS = {
 _SIGNAL_RE = re.compile(r"\b(hiring|launch|launched|announc|raised|funding|expan|opened|new office|partnership|acquired)", re.I)
 _SIZE_RE = re.compile(r"(\d[\d,]*)\s*\+?\s*(?:employees|people|team members|staff)", re.I)
 _CLOSED_RE = re.compile(r"\b(ceased operations|shut down|no longer operating|permanently closed|out of business)\b", re.I)
+
+
+def _lc(text: str) -> str:
+    """Lower-case the first letter for use mid-sentence, unless it starts a name (PureAir, Harborview Clinic...)."""
+    word = text.split(" ", 1)[0].rstrip(",.;:") if text else ""
+    common = word.isalpha() and word[1:].islower() and word.lower() in _COMMON_STARTS
+    return text[0].lower() + text[1:] if common else text
+
+
+_COMMON_STARTS = {"a", "an", "the", "they", "we", "our", "their", "it", "its", "this", "these", "clean", "quiet", "help",
+                  "helping", "better", "faster", "simple", "reliable", "affordable", "done", "commercial", "medical",
+                  "fresh", "safe", "healthy", "save", "reduce", "more", "less", "lower", "higher", "improve", "easy"}
 
 
 def _sentences(text: str) -> list[str]:
@@ -201,12 +213,14 @@ class MockLLMProvider(LLMProvider):
 
         lines = [self._greeting(data.get("contact", {})), ""]
         if points:
-            lines.append(f"I came across {company} and noticed this: {points[0].rstrip('.')}.")
+            lines.append(f"I came across {company} and noticed that {_lc(points[0].rstrip('.'))}.")
         else:
             lines.append(f"I'm reaching out because {company} looks like a company we may be able to help.")
+        ours = profile.get("company_name") or "We"
+        offer = profile.get("products_services")
         lines += [
-            f"Teams in a similar position often find {angle[0].lower() + angle[1:]} challenging. "
-            f"{profile.get('company_name') or 'We'} can help: {value.rstrip('.')}.",
+            (f"{ours} provides {_lc(offer.rstrip('.'))}" if offer else f"{ours} may be able to help")
+            + f", built around one idea: {_lc(value.rstrip('.'))}.",
             "",
             "Would you be open to a 15-minute call next week to see if this is relevant?",
             "",
@@ -226,11 +240,15 @@ class MockLLMProvider(LLMProvider):
         last_subject = previous[-1]["subject"] if previous else "Following up"
         subject = last_subject if last_subject.lower().startswith("re:") else f"Re: {last_subject}"
         is_last = data.get("followup_number") == data.get("max_followups")
-        pains = (data.get("research") or {}).get("likely_pain_points") or []
+        # Only facts we actually have: a research finding about them, and what the business itself offers.
+        facts = (data.get("research") or {}).get("personalization_points") or []
+        value = (profile.get("value_proposition") or "we may be able to help").rstrip(".")
+        company = (data.get("lead") or {}).get("company_name") or "your team"
         angle = (
-            f"One more thought: many teams tell us {pains[-1][0].lower() + pains[-1][1:]} is where they lose the most time."
-            if pains
-            else f"A quick note in case my previous email got buried: {profile.get('value_proposition') or 'we may be able to help'}."
+            f"Following up on my note about {company}. I saw that {_lc(facts[0].rstrip('.'))}, so I thought "
+            f"this might be timely: {_lc(value)}."
+            if facts
+            else f"A quick note in case my previous email got buried: {_lc(value)}."
         )
         closing = (
             "If now isn't the right time, no problem at all - just let me know and I won't follow up again."
@@ -371,12 +389,18 @@ class MockLLMProvider(LLMProvider):
         about = (product or {}).get("description") or profile.get("value_proposition") \
             or profile.get("company_description") or ""
         about = _sentences(about)[0] if _sentences(about) else about
+        about = about.rstrip(".") + "." if about else ""
         cta = f"Learn more at {profile['website']}." if profile.get("website") else "Message us to learn more."
         subject = product["name"] if product else company
         tags = ["#" + re.sub(r"[^A-Za-z0-9]", "", w) for w in [subject, *(profile.get("industries") or [])][:4]]
         tags = [t for t in tags if len(t) > 2] or ["#SmallBusiness"]
-        image_caption = f"This week at {company}: {theme}. {about} {cta}"
-        video_caption = f"{theme} — a quick look. {about} Tell us what you think in the comments. {cta}"
+        opener = (f"This week we're spotlighting the {theme.split(': ', 1)[1]}." if theme.startswith("Spotlight: ")
+                  else f"Why choose {company}?" if theme.startswith("Why ")
+                  else f"What makes {company} different?" if theme.startswith("What makes")
+                  else f"{theme}.")
+        image_caption = f"{opener} {about} {cta}"
+        video_caption = (f"A quick look at the {theme.split(': ', 1)[1]}." if theme.startswith("Spotlight: ")
+                         else f"A quick look at {company}.") + f" {about} Tell us what you think in the comments. {cta}"
         style = (profile.get("tone") or "friendly, professional")
         return {
             "theme": theme,

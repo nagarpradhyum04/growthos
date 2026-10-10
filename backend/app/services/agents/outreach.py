@@ -1,5 +1,6 @@
 """Outreach Agent (initial email) and Follow-up Agent. Both produce editable email drafts."""
 import json
+import re
 from dataclasses import dataclass
 
 from app.services.agents.base import BaseAgent, contains_email_address, ungrounded_items
@@ -26,11 +27,31 @@ def _research_corpus(context: dict) -> str:
     )
 
 
+# Claims an email may only make if the business itself stated them (profile) — never invented by the writer.
+_SOCIAL_PROOF_RE = re.compile(
+    r"\b(many|most|lots of|hundreds of|thousands of|our|other) (teams|customers|clients|companies|businesses|clinics|"
+    r"practices|partners|people) (tell|told|say|said|report|reported|love|trust|swear)\b", re.I)
+_OFFER_RE = re.compile(r"\d+\s?%\s?(off|discount)|\bdiscount\b|\bguarantee(d)?\b|\bfree (trial|month|installation|shipping)\b|"
+                       r"\brisk-free\b|\bno[- ]risk\b|[$€£₹]\s?\d", re.I)
+
+
+def email_claim_problems(text: str, context: dict) -> list[str]:
+    """Deterministic anti-fabrication checks for sales emails (independent of the model)."""
+    profile = json.dumps(context.get("business_profile", {})).lower()
+    problems = []
+    for m in _SOCIAL_PROOF_RE.finditer(text):
+        problems.append(f"Unsupported social-proof claim '{m.group(0)}': only state what the business profile says")
+    for m in _OFFER_RE.finditer(text):
+        if m.group(0).lower() not in profile:
+            problems.append(f"Offer/price/guarantee '{m.group(0)}' is not in the business profile; do not invent offers")
+    return problems
+
+
 def _email_validator(context: dict):
     corpus = _research_corpus(context)
 
     def validate(out: EmailContentOutput) -> list[str]:
-        problems = []
+        problems = email_claim_problems(f"{out.subject}\n{out.body}", context)
         if contains_email_address(out.body):
             problems.append("The body must not contain email addresses")
         for item in ungrounded_items(out.personalization_used, corpus):
