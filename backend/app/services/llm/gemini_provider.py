@@ -34,7 +34,8 @@ class GeminiLLMProvider(LLMProvider):
             "systemInstruction": {"parts": [{"text": request.system_prompt}]},
             "contents": [{"role": "model" if m.role == "assistant" else "user", "parts": [{"text": m.content}]}
                          for m in request.messages],
-            "generationConfig": {"temperature": request.temperature, "responseMimeType": "application/json"},
+            "generationConfig": {"temperature": request.temperature, "responseMimeType": "application/json",
+                                 "maxOutputTokens": 8192},
         }
         try:
             r = self._client.post(f"{self.base_url}/models/{request.model}:generateContent", json=body)
@@ -56,7 +57,13 @@ class GeminiLLMProvider(LLMProvider):
         if not candidates:
             reason = (data.get("promptFeedback") or {}).get("blockReason", "no candidates")
             raise LLMProviderError(f"LLM returned no answer ({reason})")
-        text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", []))
+        finish = candidates[0].get("finishReason", "")
+        # Skip "thought" parts (thinking models); only the answer text is the JSON.
+        text = "".join(p.get("text", "") for p in candidates[0].get("content", {}).get("parts", []) if not p.get("thought"))
+        if not text.strip():
+            raise LLMProviderError(f"LLM returned an empty answer (finishReason={finish or 'unknown'})")
+        if finish in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST", "RECITATION"):
+            raise LLMProviderError(f"LLM answer was blocked by the provider (finishReason={finish})")
         meta = data.get("usageMetadata") or {}
         usage = {"prompt_tokens": meta.get("promptTokenCount", 0), "completion_tokens": meta.get("candidatesTokenCount", 0)}
         return LLMResponse(content=text, model=data.get("modelVersion") or request.model, usage=usage)

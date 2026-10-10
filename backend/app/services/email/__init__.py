@@ -7,6 +7,10 @@ def build_email_provider(settings: Settings) -> EmailProvider:
         from app.services.email.resend_provider import ResendEmailProvider
 
         return ResendEmailProvider(settings.email_api_key)
+    if settings.email_provider == "smtp":
+        from app.services.email.smtp_provider import SmtpEmailProvider
+
+        return SmtpEmailProvider(settings.smtp_host, settings.smtp_port, settings.smtp_username, settings.smtp_password)
     if settings.email_provider in ("mock", ""):
         from app.services.email.mock_provider import MockEmailProvider
 

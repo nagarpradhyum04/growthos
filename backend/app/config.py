@@ -36,6 +36,18 @@ class Settings(BaseSettings):
     # Email
     email_provider: str = "mock"
     email_api_key: str = ""
+    # EMAIL_PROVIDER=smtp (e.g. Gmail with an App password)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    # Optional: read replies from the same mailbox over IMAP so they reach the Inbox automatically.
+    imap_host: str = ""
+    imap_port: int = 993
+    imap_username: str = ""  # defaults to SMTP_USERNAME
+    imap_password: str = ""  # defaults to SMTP_PASSWORD
+    imap_folder: str = "INBOX"
+    imap_poll_seconds: int = 60
     email_from_address: str = ""
 
     # Social media generation: "gemini" (Nano Banana images + Veo video) or "mock" (offline previews)

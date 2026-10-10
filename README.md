@@ -247,6 +247,31 @@ media posts"* in the Command Center or click *Generate* in Social Studio. Approv
 are never overwritten. Media files are stored in `MEDIA_DIR` (default `backend/media/`, gitignored)
 and served only to the business owner.
 
+## Real email with Gmail (or any SMTP mailbox)
+
+Add these to `.env`, then restart the backend and worker:
+
+```
+EMAIL_PROVIDER=smtp
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=you@gmail.com
+SMTP_PASSWORD=<16-character Google App password>
+IMAP_HOST=imap.gmail.com      # optional: replies are imported automatically
+```
+
+1. Create the App password at Google Account → Security → 2-Step Verification → App passwords. Your normal Gmail
+   password won't work.
+2. For replies, enable IMAP in Gmail settings.
+3. Approved emails are sent from your mailbox, under your business name.
+4. The worker checks the inbox every minute. It imports only replies to emails GrowthOS sent. Matching uses the
+   reply headers, or the sender being a contact you emailed.
+5. Imported replies are never marked as read, and each one is imported once.
+6. A reply stops follow-ups and goes through Email Intelligence like any other reply.
+
+To test everything from the app, go to **Settings → Connections & API keys** and use **Test connections** and
+**Send test email**.
+
 ## Checking your API keys
 
 ```bash

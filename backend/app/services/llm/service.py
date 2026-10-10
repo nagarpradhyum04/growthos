@@ -56,7 +56,16 @@ def _parse_and_validate(content: str, schema: type[T], validator: OutputValidato
     try:
         data = json.loads(_strip_code_fence(content))
     except json.JSONDecodeError as exc:
-        raise InvalidOutput([f"Response is not valid JSON: {exc.msg}"]) from exc
+        # Real models sometimes wrap the object in prose; take the outermost {...} if that parses.
+        start, end = content.find("{"), content.rfind("}")
+        try:
+            data = json.loads(content[start:end + 1]) if 0 <= start < end else None
+        except json.JSONDecodeError:
+            data = None
+        if data is None:
+            raise InvalidOutput([f"Response is not valid JSON: {exc.msg}"]) from exc
+    if isinstance(data, list) and len(data) == 1 and isinstance(data[0], dict):
+        data = data[0]  # some models return [ {...} ] in JSON mode
     if not isinstance(data, dict):
         raise InvalidOutput(["Response must be a JSON object"])
     try:

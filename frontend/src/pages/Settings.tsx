@@ -64,6 +64,7 @@ export default function Settings() {
   if (!form) return <ErrorBanner error={profile.error} />;
   return (
     <>
+      <ConnectionsCard />
       <h1>Business Profile</h1>
       <p className="muted">This is the knowledge your agents work from. Nothing here is "remembered" by the AI — it is read from your database for every task.</p>
       <ErrorBanner error={action.error} onClose={() => action.setError(null)} />
@@ -172,6 +173,43 @@ function PolicyCard() {
         <label className="checkbox"><input type="checkbox" checked={p.warranty_auto_approve} onChange={(e) => set("warranty_auto_approve", e.target.checked)} /> Auto-approve warranty claims that pass the eligibility rules (off = always human)</label>
       </div>
       <button className="primary" onClick={save} disabled={!!action.busy}>Save rules</button>
+    </Card>
+  );
+}
+
+interface CheckRow { status: "OK" | "WARN" | "FAIL"; name: string; detail: string }
+
+/** Tests every configured provider for real (AI model, Gemini key, media, email sending, reply inbox). */
+function ConnectionsCard() {
+  const [rows, setRows] = useState<CheckRow[] | null>(null);
+  const [to, setTo] = useState("");
+  const action = useAction();
+  async function run(extra: Record<string, unknown> = {}) {
+    const out = await action.run("check", () => api.post<CheckRow[]>("/system/check-connections", extra));
+    if (out) setRows(out);
+  }
+  const tone = { OK: "good", WARN: "warn", FAIL: "bad" } as const;
+  return (
+    <Card title="Connections & API keys" actions={<span className="muted small">from your .env, tested live</span>}>
+      <p className="muted small" style={{ marginTop: 0 }}>Checks that the AI model, Gemini, email sending and the reply inbox really work
+        (one tiny request each). Edit <code>.env</code> and restart the backend + worker after changing keys.</p>
+      <ErrorBanner error={action.error} onClose={() => action.setError(null)} />
+      <div className="actions">
+        <button className="primary" disabled={!!action.busy} onClick={() => run()}>{action.busy ? "Testing…" : "Test connections"}</button>
+        <input type="email" placeholder="your@email.com" value={to} onChange={(e) => setTo(e.target.value)} style={{ maxWidth: 260 }} />
+        <button disabled={!!action.busy || !to.includes("@")} onClick={() => run({ send_test_email_to: to })}>Send test email</button>
+        <button disabled={!!action.busy} onClick={() => run({ media: true })} title="Uses a little Gemini quota">Test image generation</button>
+      </div>
+      {rows && (
+        <table className="compact" style={{ marginTop: 12 }}>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.name}><td style={{ width: 90 }}><span className={`badge ${tone[r.status]}`}>{r.status}</span></td>
+                <td style={{ width: 170 }}><b>{r.name}</b></td><td className="small">{r.detail}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </Card>
   );
 }

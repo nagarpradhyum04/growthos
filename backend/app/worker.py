@@ -19,6 +19,7 @@ from app.workers.handlers import HANDLERS
 
 logger = logging.getLogger("growthos.worker")
 _running = True
+_last_inbox_poll = 0.0
 
 
 def _stop(*_):
@@ -56,6 +57,15 @@ def run_once(max_jobs: int = 20) -> dict:
         except Exception:  # noqa: BLE001
             db.rollback()
             logger.exception("Weekly social scheduling failed")
+        global _last_inbox_poll
+        settings = get_settings()
+        if settings.imap_host and time.monotonic() - _last_inbox_poll >= settings.imap_poll_seconds:
+            _last_inbox_poll = time.monotonic()
+            from app.services.email.imap_inbox import poll_inbox
+
+            inbox = poll_inbox(db, settings)
+            if inbox.get("recorded") or inbox.get("error"):
+                stats["inbox"] = inbox
         for _ in range(max_jobs):
             job = jobs.claim_next(db)
             if job is None:

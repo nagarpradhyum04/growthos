@@ -2,6 +2,7 @@
 import uuid
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -96,3 +97,19 @@ def system_status(cu: CurrentUser = Depends(current_user), db: Session = Depends
         "jobs_waiting_for_worker": stuck,
         "providers": {"llm": s.llm_provider, "email": s.email_provider, "media": s.media_provider},
     }
+
+
+class ConnectionCheckIn(BaseModel):
+    media: bool = False
+    send_test_email_to: EmailStr | None = None
+
+
+@router.post("/system/check-connections")
+def check_connections(body: ConnectionCheckIn, cu: CurrentUser = Depends(current_user)):
+    """Run the provider checks from the UI (same as `python -m app.check_providers`). Never returns secrets."""
+    from app.check_providers import run_checks
+    from app.config import get_settings
+
+    rows = run_checks(get_settings(), media=body.media,
+                      send_to=str(body.send_test_email_to) if body.send_test_email_to else None)
+    return [{"status": st.strip(), "name": name, "detail": detail} for st, name, detail in rows]

@@ -193,3 +193,36 @@ def test_vertex_veo_polls_fetch_predict_operation_and_decodes_bytes():
         "Scene 1", aspect_ratio="9:16", brand={})
     assert res.data == b"MP4" and paths[0].startswith("/v1/publishers/google/models/")
     assert paths[1].endswith(":fetchPredictOperation")
+
+
+def test_json_inside_prose_and_single_item_lists_are_accepted():
+    from pydantic import BaseModel
+
+    from app.services.llm.service import _parse_and_validate
+
+    class Out(BaseModel):
+        ok: bool
+
+    assert _parse_and_validate('Sure! Here it is:\n{"ok": true}\nHope this helps.', Out, None).ok is True
+    assert _parse_and_validate('[{"ok": true}]', Out, None).ok is True
+
+
+def test_gemini_skips_thought_parts_and_reports_blocked_answers():
+    import httpx
+
+    from app.services.llm.gemini_provider import GeminiLLMProvider
+    from app.services.llm.provider import LLMProviderError, LLMRequest
+
+    def ok(r):
+        return httpx.Response(200, json={"candidates": [{"finishReason": "STOP", "content": {"parts": [
+            {"text": "thinking...", "thought": True}, {"text": '{"ok": true}'}]}}]})
+
+    req = LLMRequest(agent_name="x", system_prompt="s", model="m", messages=[])
+    assert GeminiLLMProvider("k", 5, transport=httpx.MockTransport(ok)).complete_json(req).content == '{"ok": true}'
+    blocked = GeminiLLMProvider("k", 5, transport=httpx.MockTransport(lambda r: httpx.Response(200, json={
+        "candidates": [{"finishReason": "SAFETY", "content": {"parts": []}}]})))
+    try:
+        blocked.complete_json(req)
+        raise AssertionError("expected error")
+    except LLMProviderError as exc:
+        assert "SAFETY" in str(exc)

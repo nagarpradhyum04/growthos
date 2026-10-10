@@ -21,6 +21,7 @@ from app.errors import GrowthOSError
 from app.models import Customer, Organization, PortalAccessRequest, User
 from app.models.enums import TraceStatus, UserRole, WorkflowState, WorkflowType
 from app.security import create_access_token, hash_password
+from app.services.email_service import sender_address
 from app.services import workflow_service as wfs
 from app.services.container import Container
 from app.services.email import EmailSendError, OutgoingEmail
@@ -104,7 +105,7 @@ def request_access(db: Session, business_code: str, email: str, container: Conta
             to=customer.email, subject=f"Your {org.name} portal sign-in code: {code}",
             body=f"Hi {customer.name},\n\nYour sign-in code for the {org.name} customer portal is {code}. "
                  f"It expires in {settings.portal_code_ttl_minutes} minutes.\n\nIf you didn't request it, ignore this email.",
-            from_address=settings.email_from_address or f"{org.name} <no-reply@example.com>",
+            from_address=sender_address(settings, org.name),
             idempotency_key=f"portal-code-{req.id}"))
     except EmailSendError as exc:
         logger.warning("Could not send portal code: %s", exc)

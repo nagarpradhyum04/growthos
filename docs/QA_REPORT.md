@@ -1,13 +1,13 @@
 # GrowthOS QA report
 
-Run: 2026-10-10 01:29 · 3s · LLM `mock` · media `mock` · email forced to `mock`
+Run: 2026-10-10 06:13 · 4s · LLM `mock` · media `mock` · email forced to `mock`
 
 **127 / 127 checks passed.** All agents behaved as expected.
 
 Open the same data in the app:
 
-- Owner app: `qa-owner-20261010012914@growthos-qa.example` / `qa-password-123`
-- Customer portal: Business ID `GOS-GP26GL` + `dana-20261010012914@customer-qa.example`
+- Owner app: `qa-owner-20261010061318@growthos-qa.example` / `qa-password-123`
+- Customer portal: Business ID `GOS-C8FHGF` + `dana-20261010061318@customer-qa.example`
 
 > LLM is `mock`: agents are rule-based stand-ins. Set `LLM_PROVIDER=gemini` or `openai` with a key and re-run `python -m app.qa_check` to test the real models against the same expectations.
 

@@ -73,6 +73,15 @@ def reject_email(db: Session, email: Email) -> None:
     db.flush()
 
 
+def sender_address(settings, business_name: str) -> str:
+    """From header: EMAIL_FROM_ADDRESS, else (SMTP) your own mailbox under the business name."""
+    if settings.email_from_address:
+        return settings.email_from_address
+    if settings.email_provider == "smtp" and settings.smtp_username:
+        return f"{business_name} <{settings.smtp_username}>"
+    return f"{business_name} <no-reply@example.com>"
+
+
 def unsubscribe_footer(contact: Contact) -> str:
     token = create_unsubscribe_token(contact.id, contact.organization_id)
     url = f"{get_settings().public_base_url.rstrip('/')}/public/unsubscribe?token={token}"
@@ -116,7 +125,7 @@ def send_email(db: Session, email_id: uuid.UUID, organization_id: uuid.UUID, con
                 to=contact.email,
                 subject=email.subject,
                 body=email.body + unsubscribe_footer(contact),
-                from_address=settings.email_from_address or f"{org.name} <no-reply@example.com>",
+                from_address=sender_address(settings, org.name),
                 idempotency_key=str(email.id),
             )
         )
@@ -125,7 +134,7 @@ def send_email(db: Session, email_id: uuid.UUID, organization_id: uuid.UUID, con
         email.last_error = str(exc)
         db.commit()
         logger.warning("Email %s failed to send: %s", email.id, exc)
-        raise ExternalServiceError("The email provider failed to send this email. You can retry.") from exc
+        raise ExternalServiceError(f"The email provider failed to send this email: {exc}. You can retry.") from exc
 
     now = datetime.now(timezone.utc)
     email.status = EmailStatus.SENT
