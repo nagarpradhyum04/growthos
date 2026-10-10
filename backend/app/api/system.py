@@ -79,7 +79,12 @@ def system_status(cu: CurrentUser = Depends(current_user), db: Session = Depends
 
     ensure_review_approvals(db, org)
     s = c.settings
+    last = db.scalar(select(AgentRun).where(AgentRun.organization_id == org).order_by(AgentRun.started_at.desc()))
+    last_run = None if last is None else {
+        "agent": last.agent_name, "provider": last.provider, "model": last.model, "status": last.status.value,
+        "error": (last.error or "")[:300] if last.status.value != "SUCCEEDED" else None, "at": last.started_at}
     return {
+        "last_agent_run": last_run,
         "workflows_running": running,
         "agents_active_10m": sorted(agents_active),
         "pending_approvals": count(select(func.count(Approval.id)).where(Approval.organization_id == org,

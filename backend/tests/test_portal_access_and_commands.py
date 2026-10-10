@@ -262,3 +262,42 @@ def test_existing_drafts_without_approval_are_backfilled(client, auth, lead, db)
     db.commit()
     assert len(client.get("/approvals", headers=auth).json()) == 1
     assert client.get("/system/status", headers=auth).json()["pending_approvals"] == 1
+
+
+def test_find_customers_defaults_to_the_campaign_with_new_prospects(client, auth, lead, campaign):
+    # The user's case: an older campaign whose only lead was already processed must not be picked
+    # over a campaign that still has new prospects.
+    client.post(f"/leads/{lead['id']}/research", headers=auth)
+    client.post(f"/leads/{lead['id']}/qualify", headers=auth)
+    fresh = client.post("/campaigns", headers=auth, json={"name": "Fresh", "objective": "Calls",
+                                                          "target_audience": "Sales leaders"}).json()
+    done = client.post("/campaigns", headers=auth, json={"name": "Paused Test Campaign", "objective": "x",
+                                                         "target_audience": "x"}).json()
+    client.post("/leads", headers=auth, json={"campaign_id": fresh["id"], "company_name": "Acme Logistics",
+                                              "contact_email": "new@acme-logistics.example", "contact_name": "Jo"})
+    camps = {c["name"]: c for c in client.get("/campaigns", headers=auth).json()}
+    assert camps["Fresh"]["prospects_waiting"] == 1 and camps["Paused Test Campaign"]["prospects_waiting"] == 0
+    wf = client.post("/workflows/goal?run_now=true", headers=auth,
+                     json={"goal": "Find high-quality customers for our business"}).json()
+    assert wf["campaign_id"] == fresh["id"] and wf["campaign_id"] != done["id"]
+    # Running on a campaign with nothing left says where the new prospects are.
+    wf2 = client.post("/workflows/goal?run_now=true", headers=auth, json={
+        "goal": "Find high-quality customers for our business", "campaign_id": campaign["id"]}).json()
+    client.post("/leads", headers=auth, json={"campaign_id": fresh["id"], "company_name": "Beta Freight",
+                                              "contact_email": "b@beta-freight.example", "contact_name": "Bo"})
+    wf3 = client.post("/workflows/goal?run_now=true", headers=auth, json={
+        "goal": "Find high-quality customers for our business", "campaign_id": campaign["id"]}).json()
+    finish = [e for e in client.get(f"/workflows/{wf3['id']}", headers=auth).json()["events"] if e["action"] == "Finish"][0]
+    assert "Fresh" in finish["result"] and "new prospect" in finish["result"]
+    assert wf2
+
+
+def test_status_bar_reports_the_last_agent_error(client, auth, lead, container):
+    from app.services.llm.provider import LLMProviderError
+    from tests.fakes import ScriptedProvider
+
+    assert client.get("/system/status", headers=auth).json()["last_agent_run"] is None
+    container.llm.provider = ScriptedProvider(LLMProviderError("API key not valid"))
+    client.post(f"/leads/{lead['id']}/research", headers=auth)
+    last = client.get("/system/status", headers=auth).json()["last_agent_run"]
+    assert last["agent"] == "research" and last["status"] != "SUCCEEDED" and "API key not valid" in last["error"]

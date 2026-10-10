@@ -10,7 +10,7 @@ from app.api.deps import CurrentUser, container, current_user
 from app.db import get_db
 from app.models import Campaign, Lead, Workflow, WorkflowEvent
 from app.errors import InvalidStateError
-from app.models.enums import CampaignStatus, WorkflowType
+from app.models.enums import WorkflowType
 from app.services import command_router
 from app.services import jobs
 from app.services import workflow_service as wfs
@@ -74,9 +74,9 @@ def start_goal(body: GoalRequest, run_now: bool = False, cu: CurrentUser = Depen
         if body.campaign_id:
             campaign_id = get_owned(db, Campaign, body.campaign_id, cu.org_id).id
         else:
-            campaign_id = db.scalar(select(Campaign.id).where(Campaign.organization_id == cu.org_id,
-                                                              Campaign.status == CampaignStatus.ACTIVE)
-                                    .order_by(Campaign.created_at.desc()))
+            from app.api.campaigns import best_campaign_id
+
+            campaign_id = best_campaign_id(db, cu.org_id)
             if campaign_id is None:
                 raise InvalidStateError("Create an active campaign with prospects first.")
     wf = wfs.start_workflow(db, cu.org_id, WorkflowType.GOAL, goal=body.goal.strip(), campaign_id=campaign_id,

@@ -659,3 +659,5 @@ select { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; padd
 h1, h2, .brand, .goal-label b, .sidebar-footer .org { font-variant-numeric: lining-nums; font-feature-settings: "lnum" 1; }
 .layout { background: linear-gradient(to right, #171717 228px, transparent 228px); }
 @media (max-width: 900px) { .layout { background: none; } }
+.statusbar .sb-error { color: #ffb4a8; }
+.statusbar .sb-error b { color: #ffd2ca; }

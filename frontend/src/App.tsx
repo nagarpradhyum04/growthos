@@ -70,7 +70,14 @@ function StatusBar({ path }: { path: string }) {
           <span>Orchestrator: <b>{st.jobs_waiting_for_worker ? "worker not picking up jobs" : "online"}</b></span>
           <span title="can_send() and the policy layer run on every send; this counts actions they blocked in the last 7 days">
             Policy gate: <b>enforced</b> · {st.blocked_by_policy_7d} blocked (7d)</span>
-          <span>LLM: {st.providers.llm} · Media: {st.providers.media === "gemini" ? "Nano Banana / Veo" : "mock"}</span>
+          {st.last_agent_run?.error ? (
+            <span className="sb-error" title={st.last_agent_run.error}>
+              LLM error ({st.last_agent_run.provider}): <b>{st.last_agent_run.error.slice(0, 70)}</b></span>
+          ) : (
+            <span title={st.last_agent_run ? `Last agent call: ${st.last_agent_run.agent} on ${st.last_agent_run.model}` : "No agent calls yet"}>
+              LLM: <b>{st.providers.llm}</b>{st.last_agent_run && st.providers.llm !== "mock" ? ` (${st.last_agent_run.model})` : ""}
+              {" · "}Media: {st.providers.media === "gemini" ? "Nano Banana / Veo" : "mock"}</span>
+          )}
         </div>
       )}
     </div>

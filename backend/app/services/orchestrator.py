@@ -210,6 +210,16 @@ class Orchestrator:
                 breakdown = ", ".join(f"{n} {st.value.lower().replace('_', ' ')}" for st, n in by_status.items())
                 why = (f"Nothing new to do: all {sum(by_status.values())} prospect(s) in “{campaign.name}” were already "
                        f"processed ({breakdown}). Review drafts in Approvals, or import new prospects")
+                from app.api.campaigns import best_campaign_id
+
+                other_id = best_campaign_id(db, wf.organization_id)
+                other = db.get(Campaign, other_id) if other_id and other_id != campaign.id else None
+                if other is not None:
+                    waiting = db.scalar(select(func.count(Lead.id)).where(
+                        Lead.campaign_id == other.id, Lead.disabled.is_(False),
+                        Lead.status.in_([LeadStatus.NEW, LeadStatus.RESEARCHED, LeadStatus.QUALIFIED]))) or 0
+                    if waiting:
+                        why += f". Campaign “{other.name}” has {waiting} new prospect(s): run this command on that campaign"
             else:
                 why = f"Nothing to do: “{campaign.name}” has no prospects yet. Import prospects first"
             wfs.record(db, wf, "orchestrator", "Finish", TraceStatus.COMPLETED, why, state=WorkflowState.COMPLETED)
@@ -397,7 +407,7 @@ class Orchestrator:
     def _cmd_full_cycle(self, wf: Workflow, max_leads: int) -> dict:
         """Run every command in order as child workflows. Each stage is recorded with its real outcome,
         including "nothing to do" and why; a failing stage never stops the others."""
-        from app.models.enums import CampaignStatus, WorkflowType
+        from app.models.enums import WorkflowType
         from app.services.command_router import BY_KEY
 
         self._understood(wf, "run every agent: " + " → ".join(BY_KEY[k].label for k in self.FULL_CYCLE))
@@ -406,10 +416,9 @@ class Orchestrator:
             cmd = BY_KEY[key]
             campaign_id = None
             if cmd.needs_campaign:
-                campaign_id = wf.campaign_id or self.db.scalar(
-                    select(Campaign.id).where(Campaign.organization_id == wf.organization_id,
-                                              Campaign.status == CampaignStatus.ACTIVE)
-                    .order_by(Campaign.created_at.desc()))
+                from app.api.campaigns import best_campaign_id
+
+                campaign_id = wf.campaign_id or best_campaign_id(self.db, wf.organization_id)
                 if campaign_id is None:
                     wfs.record(self.db, wf, "orchestrator", f"Stage: {cmd.label}", TraceStatus.SKIPPED,
                                "Skipped: there is no active campaign with prospects. Create one under Campaigns")

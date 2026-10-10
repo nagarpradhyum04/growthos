@@ -105,6 +105,7 @@ class CampaignOut(ORM):
 
 class CampaignSummary(CampaignOut):
     leads: int
+    prospects_waiting: int = 0  # not yet researched/qualified/drafted: what "Find customers" would work on
     qualified_leads: int
     emails_sent: int
     replies: int

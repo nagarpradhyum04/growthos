@@ -8,12 +8,26 @@ from app.api.deps import CurrentUser, current_user
 from app.db import get_db
 from app.errors import InvalidStateError
 from app.models import Campaign, Email, EmailReply, Lead
-from app.models.enums import SENT_LIKE_STATUSES, CampaignStatus
+from app.models.enums import SENT_LIKE_STATUSES, CampaignStatus, LeadStatus
 from app.schemas import CampaignIn, CampaignOut, CampaignSummary
 from app.services.common import get_owned
 from app.services.safety import max_followups_for
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
+
+# Prospects the Find-customers workflow would still work on (same rule as Orchestrator.run_goal).
+WAITING_FILTER = (Lead.disabled.is_(False), Lead.status.in_([LeadStatus.NEW, LeadStatus.RESEARCHED, LeadStatus.QUALIFIED]))
+
+
+def best_campaign_id(db: Session, organization_id):
+    """Default campaign for Find customers: the active one with the most prospects waiting, else the newest active."""
+    waiting = func.count(Lead.id)
+    row = db.execute(select(Campaign.id, waiting).outerjoin(Lead, (Lead.campaign_id == Campaign.id) & WAITING_FILTER[0]
+                                                         & WAITING_FILTER[1])
+                     .where(Campaign.organization_id == organization_id, Campaign.status == CampaignStatus.ACTIVE)
+                     .group_by(Campaign.id, Campaign.created_at)
+                     .order_by(waiting.desc(), Campaign.created_at.desc())).first()
+    return row[0] if row else None
 
 
 def _summary(db: Session, c: Campaign) -> CampaignSummary:
@@ -23,6 +37,7 @@ def _summary(db: Session, c: Campaign) -> CampaignSummary:
     return CampaignSummary(
         **CampaignOut.model_validate(c).model_dump(),
         leads=count(select(func.count(Lead.id)).where(Lead.campaign_id == c.id)),
+        prospects_waiting=count(select(func.count(Lead.id)).where(Lead.campaign_id == c.id, *WAITING_FILTER)),
         qualified_leads=count(select(func.count(Lead.id)).where(Lead.campaign_id == c.id, Lead.qualified.is_(True))),
         emails_sent=count(select(func.count(Email.id)).where(Email.campaign_id == c.id,
                                                              Email.status.in_(SENT_LIKE_STATUSES))),

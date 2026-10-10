@@ -139,7 +139,11 @@ function GoalLauncher({ campaigns, onLaunched }: { campaigns: Campaign[]; onLaun
   const [campaignId, setCampaignId] = useState("");
   const [launched, setLaunched] = useState<WorkflowSummary[]>([]);
   const action = useAction();
-  const selected = campaignId || campaigns.find((c) => c.status === "ACTIVE")?.id || "";
+  // Default: the active campaign with the most prospects still waiting (what Find customers would work on).
+  const active = campaigns.filter((c) => c.status === "ACTIVE");
+  const best = [...active].sort((a, b) => (b.prospects_waiting ?? 0) - (a.prospects_waiting ?? 0))[0];
+  const selected = campaignId || best?.id || "";
+  const chosen = campaigns.find((c) => c.id === selected);
 
   // Live, deterministic preview of which workflow the Orchestrator will run.
   useEffect(() => {
@@ -189,22 +193,27 @@ function GoalLauncher({ campaigns, onLaunched }: { campaigns: Campaign[]; onLaun
         {willRun?.needs_campaign && (
           <select value={selected} onChange={(e) => setCampaignId(e.target.value)} required>
             {campaigns.length === 0 && <option value="">Create a campaign first</option>}
-            {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.leads} prospects)</option>)}
+            {active.map((c) => <option key={c.id} value={c.id}>{c.name} — {c.prospects_waiting ?? 0} new of {c.leads} prospects</option>)}
           </select>
         )}
         <button className="primary" disabled={!!action.busy || !willRun || (willRun.needs_campaign && !selected)}>▶ Run</button>
       </form>
       {goal.trim().length >= 3 && preview && (
-        willRun ? (
+        willRun ? (<>
           <p className="route-preview small">→ Will run <b>{willRun.label}</b>: {willRun.description} <span className="muted">(matched: {preview.matched.join(", ")})</span></p>
-        ) : (
+          {willRun.needs_campaign && chosen && (chosen.prospects_waiting ?? 0) === 0 && (
+            <p className="route-preview small unknown">“{chosen.name}” {chosen.leads ? `has no new prospects (all ${chosen.leads} already processed)` : "has no prospects yet"},
+              so the Research, Qualification and Outreach agents would have nothing to do. Pick another campaign or import prospects.</p>
+          )}
+        </>) : (
           <p className="route-preview small unknown">I can't map that to a safe workflow yet. Try one of the suggestions below.</p>
         )
       )}
       <div className="suggestions">
         {suggestions.map((s) => (
-          <button key={s.key} type="button" className="chip" title={s.label} disabled={!!action.busy}
-                  onClick={() => (commands.data?.find((c) => c.key === s.key)?.needs_campaign && !selected) ? setGoal(s.text) : void submit(s.text, s.key)}>
+          <button key={s.key} type="button" className="chip" disabled={!!action.busy}
+                  onClick={() => commands.data?.find((c) => c.key === s.key)?.needs_campaign ? setGoal(s.text) : void submit(s.text, s.key)}
+                  title={commands.data?.find((c) => c.key === s.key)?.needs_campaign ? "Choose the campaign, then press Run" : s.label}>
             {s.text}
           </button>
         ))}

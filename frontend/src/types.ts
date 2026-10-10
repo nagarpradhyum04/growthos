@@ -18,6 +18,7 @@ export interface Campaign {
   followup_delay_days: number | null;
   created_at: string;
   leads: number;
+  prospects_waiting?: number;
   qualified_leads: number;
   emails_sent: number;
   replies: number;
@@ -381,6 +382,7 @@ export interface SystemStatus {
   blocked_by_policy_7d: number;
   jobs_waiting_for_worker: number;
   providers: { llm: string; email: string; media: string };
+  last_agent_run: { agent: string; provider: string; model: string; status: string; error: string | null; at: string } | null;
 }
 
 // ---------------- Customers ----------------
